@@ -383,18 +383,20 @@ void Game::CreateBasicGeometry()
 	D3D12_CPU_DESCRIPTOR_HANDLE cobblestoneMetal = DX12Helper::GetInstance().LoadTexture(FixPath(L"../../Assets/Textures/cobblestone_metal.png").c_str());
 
 	// Materials
-	std::shared_ptr<Material> cobblestoneMaterial = std::make_shared<Material>(pipelineState, XMFLOAT3(1, 1, 1), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
+	std::shared_ptr<Material> cobblestoneMaterial = std::make_shared<Material>(pipelineState, XMFLOAT3(1, .5, .5), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
 	cobblestoneMaterial->AddTexture(cobblestoneAlbedo, 0);
 	cobblestoneMaterial->AddTexture(cobblestoneNormals, 1);
 	cobblestoneMaterial->AddTexture(cobblestoneRoughness, 2);
 	cobblestoneMaterial->AddTexture(cobblestoneMetal, 3);
 	cobblestoneMaterial->FinalizeMaterial();
 
+	std::shared_ptr<Material> floorMaterial = std::make_shared<Material>(pipelineState, XMFLOAT3(.3, .3, .3), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
 
 
 	std::shared_ptr<Mesh> cube = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/cube.obj").c_str());
 	std::shared_ptr<Mesh> helix = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/helix.obj").c_str());
 	std::shared_ptr<Mesh> torus = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/torus.obj").c_str());
+	std::shared_ptr<Mesh> sphere = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/sphere.obj").c_str());
 
 	std::shared_ptr<Entity> eCube = std::make_shared<Entity>(cube, cobblestoneMaterial);
 	eCube->GetTransform()->SetPosition(-4, 0, 0);
@@ -405,10 +407,30 @@ void Game::CreateBasicGeometry()
 	std::shared_ptr<Entity> eTorus = std::make_shared<Entity>(torus, cobblestoneMaterial);
 	eTorus->GetTransform()->SetPosition(0, 0, 0);
 
+	std::shared_ptr<Entity> floor = std::make_shared<Entity>(cube, floorMaterial);
+	floor->GetTransform()->SetPosition(0, -8, 0);
+	floor->GetTransform()->SetScale(30.0f, 1.0f, 30.0f);
+
+	
+
+
 	entities.push_back(eCube);
 	entities.push_back(eHelix);
 	entities.push_back(eTorus);
+	entities.push_back(floor);
 
+	// Spheres
+	for (int i = 0; i < 5; i++)
+	{
+
+		std::shared_ptr<Material> mat = std::make_shared<Material>(pipelineState, XMFLOAT3(RandomRange(0.0f, 1.0f), RandomRange(0.0f, 1.0f), RandomRange(0.0f, 1.0f)), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
+		std::shared_ptr<Entity> eSphere = std::make_shared<Entity>(sphere, mat);
+		eSphere->GetTransform()->SetPosition(RandomRange(-8.0f, 9.0f), RandomRange(-3.0f, 3.0f), RandomRange(-9.0f, 9.0f));
+		float sphereScalar = RandomRange(0.5f, 2.0f);
+		eSphere->GetTransform()->SetScale(sphereScalar, sphereScalar, sphereScalar);
+
+		entities.push_back(eSphere);
+	}
 
 	RaytracingHelper::GetInstance().CreateTopLevelAccelerationStructureForScene(entities);
 }
@@ -450,6 +472,11 @@ void Game::Update(float deltaTime, float totalTime)
 		if (i == 2)
 		{
 			entities[i]->GetTransform()->Rotate(deltaTime, 0, 0);
+		}
+
+		if (i >= 4)
+		{
+			entities[i]->GetTransform()->MoveRelative(XMFLOAT3(sin(deltaTime + i) * .1f, 0.0, sin(deltaTime + i) * .1f));
 		}
 	}
 
@@ -632,4 +659,5 @@ void Game::Draw(float deltaTime, float totalTime)
 	//	if (currentSwapBuffer >= numBackBuffers)
 	//		currentSwapBuffer = 0;
 	//}
+DX12Helper::GetInstance().WaitForGPU();
 }
