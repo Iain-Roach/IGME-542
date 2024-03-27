@@ -107,9 +107,9 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="Lighting.hlsli">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

@@ -10,6 +10,9 @@
 #pragma comment(lib, "d3dcompiler.lib")
 #include <d3dcompiler.h>
 
+#include <time.h>
+#include <stdlib.h>
+
 // For the DirectX Math library
 using namespace DirectX;
 
@@ -78,6 +81,8 @@ void Game::Init()
 		commandList,
 		FixPath(L"Raytracing.cso"));
 
+	srand((unsigned int)time(0));
+
 
 	// Helper methods for loading shaders, creating some basic
 	// geometry to draw and some simple camera matrices.
@@ -113,7 +118,7 @@ void Game::Init()
 
 
 	// initialize camera
-	camera = std::make_shared<Camera>(XMFLOAT3(0.0f, 0.0f, -10.0f), 5.0f, 0.002f, XM_PIDIV4, windowWidth / (float)windowHeight);
+	camera = std::make_shared<Camera>(XMFLOAT3(0.0f, -6.0f, -10.0f), 5.0f, 0.002f, XM_PIDIV4, windowWidth / (float)windowHeight);
 }
 
 // --------------------------------------------------------
@@ -383,7 +388,7 @@ void Game::CreateBasicGeometry()
 	D3D12_CPU_DESCRIPTOR_HANDLE cobblestoneMetal = DX12Helper::GetInstance().LoadTexture(FixPath(L"../../Assets/Textures/cobblestone_metal.png").c_str());
 
 	// Materials
-	std::shared_ptr<Material> cobblestoneMaterial = std::make_shared<Material>(pipelineState, XMFLOAT3(1, .5, .5), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
+	std::shared_ptr<Material> cobblestoneMaterial = std::make_shared<Material>(pipelineState, XMFLOAT3(.6, .6, .6), XMFLOAT2(1, 1), XMFLOAT2(0, 0), .5f, .5f);
 	cobblestoneMaterial->AddTexture(cobblestoneAlbedo, 0);
 	cobblestoneMaterial->AddTexture(cobblestoneNormals, 1);
 	cobblestoneMaterial->AddTexture(cobblestoneRoughness, 2);
@@ -399,13 +404,13 @@ void Game::CreateBasicGeometry()
 	std::shared_ptr<Mesh> sphere = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/sphere.obj").c_str());
 
 	std::shared_ptr<Entity> eCube = std::make_shared<Entity>(cube, cobblestoneMaterial);
-	eCube->GetTransform()->SetPosition(-4, 0, 0);
+	eCube->GetTransform()->SetPosition(-4, -6, 0);
 
 	std::shared_ptr<Entity> eHelix = std::make_shared<Entity>(helix, cobblestoneMaterial);
-	eHelix->GetTransform()->SetPosition(4, 0, 0);
+	eHelix->GetTransform()->SetPosition(4, -6, 0);
 
 	std::shared_ptr<Entity> eTorus = std::make_shared<Entity>(torus, cobblestoneMaterial);
-	eTorus->GetTransform()->SetPosition(0, 0, 0);
+	eTorus->GetTransform()->SetPosition(0, -5.8, 0);
 
 	std::shared_ptr<Entity> floor = std::make_shared<Entity>(cube, floorMaterial);
 	floor->GetTransform()->SetPosition(0, -8, 0);
@@ -413,11 +418,13 @@ void Game::CreateBasicGeometry()
 
 	
 
-
-	entities.push_back(eCube);
-	entities.push_back(eHelix);
-	entities.push_back(eTorus);
 	entities.push_back(floor);
+	
+	entities.push_back(eTorus);
+	entities.push_back(eHelix);
+	entities.push_back(eCube);
+	
+	
 
 	// Spheres
 	for (int i = 0; i < 5; i++)
@@ -468,8 +475,9 @@ void Game::Update(float deltaTime, float totalTime)
 	// Update entities so they spin
 	for (int i = 0; i < entities.size(); i++)
 	{
+		if(i != 0)
 		entities[i]->GetTransform()->Rotate(0, deltaTime, 0);
-		if (i == 2)
+		if (i == 1)
 		{
 			entities[i]->GetTransform()->Rotate(deltaTime, 0, 0);
 		}

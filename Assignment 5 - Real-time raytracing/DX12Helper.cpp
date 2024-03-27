@@ -8,6 +8,7 @@ DX12Helper* DX12Helper::instance;
 
 DX12Helper::~DX12Helper()
 {
+	delete frameSyncFenceCounters;
 }
 
 // --------------------------------------------------------
@@ -295,6 +296,11 @@ void DX12Helper::ReserveSrvUavDescriptorHeapSlot(D3D12_CPU_DESCRIPTOR_HANDLE* re
 
 	// Update the overall offset
 	srvDescriptorOffset++;
+}
+
+UINT DX12Helper::GetDescriptorIndex(D3D12_GPU_DESCRIPTOR_HANDLE handle)
+{
+	return (UINT)(handle.ptr - cbvSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr) / (UINT)cbvSrvDescriptorHeapIncrementSize;
 }
 
 // --------------------------------------------------------

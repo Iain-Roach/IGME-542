@@ -1,8 +1,8 @@
 #include "Material.h"
 #include "DX12Helper.h"
 
-Material::Material(Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState, DirectX::XMFLOAT3 colorTint, DirectX::XMFLOAT2 uvScale, DirectX::XMFLOAT2 uvOffset)
-    : pipelineState(pipelineState), colorTint(colorTint), uvScale(uvScale), uvOffset(uvOffset)
+Material::Material(Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState, DirectX::XMFLOAT3 colorTint, DirectX::XMFLOAT2 uvScale, DirectX::XMFLOAT2 uvOffset, float roughness, float metal)
+    : pipelineState(pipelineState), colorTint(colorTint), uvScale(uvScale), uvOffset(uvOffset), roughness(roughness), metal(metal)
 {
     finalized = false;
     finalGPUHandleForSRVs = {};
@@ -23,6 +23,16 @@ DirectX::XMFLOAT2 Material::GetUVOffset()
     return uvOffset;
 }
 
+float Material::GetMetal()
+{
+    return metal;
+}
+
+float Material::GetRoughness()
+{
+    return roughness;
+}
+
 D3D12_GPU_DESCRIPTOR_HANDLE Material::GetFinalGPUHandleForTextures()
 {
     return finalGPUHandleForSRVs;
@@ -33,19 +43,29 @@ Microsoft::WRL::ComPtr<ID3D12PipelineState> Material::GetPipelineState()
     return pipelineState;
 }
 
-void Material::SetColorTint()
+void Material::SetColorTint(DirectX::XMFLOAT3 tint)
 {
-    this->colorTint = colorTint;
+    this->colorTint = tint;
 }
 
-void Material::SetUVScale()
+void Material::SetUVScale(DirectX::XMFLOAT2 scale)
 {
-    this->uvScale = uvScale;
+    this->uvScale = scale;
 }
 
-void Material::SetUVOffset()
+void Material::SetUVOffset(DirectX::XMFLOAT2 offset)
 {
-    this->uvOffset = uvOffset;
+    this->uvOffset = offset;
+}
+
+void Material::SetMetal(float metal)
+{
+    this->metal = metal;
+}
+
+void Material::SetRoughness(float roughness)
+{
+    this->roughness = roughness;
 }
 
 void Material::SetPipelineState()

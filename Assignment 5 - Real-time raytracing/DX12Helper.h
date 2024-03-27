@@ -81,6 +81,8 @@ public:
 		D3D12_CPU_DESCRIPTOR_HANDLE* reservedCPUHandle,
 		D3D12_GPU_DESCRIPTOR_HANDLE* reservedGPUHandle);
 
+	UINT GetDescriptorIndex(D3D12_GPU_DESCRIPTOR_HANDLE handle);
+
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> GetDefaultAllocator();
 
 private:
