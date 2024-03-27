@@ -196,7 +196,28 @@ float3 rand3(float2 uv)
 		rand(uv.yx));
 }
 
+// Fresnel approximation
+float FresnelSchlick(float NdotV, float indexOfRefraction)
+{
+    float r0 = pow((1.0f - indexOfRefraction) / (1.0f + indexOfRefraction), 2.0f);
+    return r0 + (1.0f - r0) * pow(1 - NdotV, 5.0f);
+}
 
+// Refraction function that returns a bool depending on result
+bool TryRefract(float3 incident, float3 normal, float ior, out float3 refr)
+{
+    float NdotI = dot(normal, incident);
+    float k = 1.0f - ior * ior * (1.0f - NdotI * NdotI);
+
+    if (k < 0.0f)
+    {
+        refr = float3(0, 0, 0);
+        return false;
+    }
+
+    refr = ior * incident - (ior * NdotI + sqrt(k)) * normal;
+    return true;
+}
 
 // === Shaders ===
 
@@ -211,7 +232,7 @@ void RayGen()
 	// Average of all rays per pixel
     float3 totalColor = float3(0, 0, 0);
 
-    int raysPerPixel = 25;
+    int raysPerPixel = 50;
     for (int r = 0; r < raysPerPixel; r++)
     {
         float2 adjustedIndices = (float2) rayIndices;
@@ -277,31 +298,91 @@ void ClosestHit(inout RayPayload payload, BuiltInTriangleIntersectionAttributes 
         return;
 
     }
+    
+    uint value = InstanceID();
+    if (value % 2 == 0)
+    {
+        payload.color *= entityColor[InstanceID()].rgb;
 	
-    payload.color *= entityColor[InstanceID()].rgb;
+        Vertex hit = GetHitDetails(PrimitiveIndex(), hitAttributes);
+        float3 normal_WS = normalize(mul(hit.normal, (float3x3) ObjectToWorld4x3()));
 	
-    Vertex hit = GetHitDetails(PrimitiveIndex(), hitAttributes);
-    float3 normal_WS = normalize(mul(hit.normal, (float3x3)ObjectToWorld4x3()));
+        float2 uv = (float2) DispatchRaysIndex() / (float2) DispatchRaysDimensions();
+        float2 rng = rand2(uv * (payload.recursionDepth + 1) + payload.rayPerPixelIndex + RayTCurrent());
 	
-    float2 uv = (float2) DispatchRaysIndex() / (float2) DispatchRaysDimensions();
-    float2 rng = rand2(uv * (payload.recursionDepth + 1) + payload.rayPerPixelIndex + RayTCurrent());
+        float3 refl = reflect(WorldRayDirection(), normal_WS);
+        float3 randomBounce = RandomCosineWeightedHemisphere(rand(rng), rand(rng.yx), normal_WS);
+        float3 dir = normalize(lerp(refl, randomBounce, entityColor[InstanceID()].a));
 	
-    float3 refl = reflect(WorldRayDirection(), normal_WS);
-    float3 randomBounce = RandomCosineWeightedHemisphere(rand(rng), rand(rng.yx), normal_WS);
-    float3 dir = normalize(lerp(refl, randomBounce, entityColor[InstanceID()].a));
+        RayDesc ray;
+        ray.Direction = dir;
+        ray.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+        ray.TMax = 100.0f;
+        ray.TMin = 0.001f;
 	
-    RayDesc ray;
-    ray.Direction = dir;
-    ray.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-    ray.TMax = 100.0f;
-    ray.TMin = 0.001f;
-	
-    payload.recursionDepth++;
-    TraceRay(
+        payload.recursionDepth++;
+        TraceRay(
 	   SceneTLAS,
 	RAY_FLAG_NONE,
 	0xFF, 0, 0, 0,
 	ray,
 	payload);
+    }
+    
+    if (value % 2 == 1)
+    {
+        // We've hit, so adjust the payload color by this instance's color
+        payload.color *= entityColor[InstanceID()].rgb;
+
+	// Get the geometry hit details and convert normal to world space
+        Vertex hit = GetHitDetails(PrimitiveIndex(), hitAttributes);
+        float3 normal_WS = normalize(mul(hit.normal, (float3x3) ObjectToWorld4x3()));
+
+	// Calc a unique RNG value for this ray, based on the "uv" of this pixel and other per-ray data
+        float2 uv = (float2) DispatchRaysIndex() / (float2) DispatchRaysDimensions();
+        float2 rng = rand2(uv * (payload.recursionDepth + 1) + payload.rayPerPixelIndex + RayTCurrent());
+
+	// Get the index of refraction based on the side of the hit
+        float ior = 1.5f;
+        if (HitKind() == HIT_KIND_TRIANGLE_FRONT_FACE)
+        {
+		// Invert the index of refraction for front faces
+            ior = 1.0f / ior;
+        }
+        else
+        {
+		// Invert the normal for back faces
+            normal_WS *= -1;
+        }
+
+	// Random chance for reflection instead of refraction based on Fresnel
+        float NdotV = dot(-WorldRayDirection(), normal_WS);
+        bool reflectFresnel = FresnelSchlick(NdotV, ior) > rand(rng);
+
+	// Test for refraction
+        float3 dir;
+        if (reflectFresnel || !TryRefract(WorldRayDirection(), normal_WS, ior, dir))
+            dir = reflect(WorldRayDirection(), normal_WS);
+
+	// Interpolate between refract/reflect and random bounce based on roughness squared
+        float3 randomBounce = RandomCosineWeightedHemisphere(rand(rng), rand(rng.yx), normal_WS);
+        dir = normalize(lerp(dir, randomBounce, saturate(pow(entityColor[InstanceID()].a, 2))));
+
+	// Create the new recursive ray
+        RayDesc ray;
+        ray.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+        ray.Direction = dir;
+        ray.TMin = 0.0001f;
+        ray.TMax = 1000.0f;
+
+	// Recursive ray trace
+        payload.recursionDepth++;
+        TraceRay(
+		SceneTLAS,
+		RAY_FLAG_NONE,
+		0xFF, 0, 0, 0, // Mask and offsets
+		ray,
+		payload);
+    }
 	
 }

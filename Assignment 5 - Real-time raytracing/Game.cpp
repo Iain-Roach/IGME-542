@@ -404,7 +404,7 @@ void Game::CreateBasicGeometry()
 	std::shared_ptr<Mesh> sphere = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/sphere.obj").c_str());
 
 	std::shared_ptr<Entity> eCube = std::make_shared<Entity>(cube, cobblestoneMaterial);
-	eCube->GetTransform()->SetPosition(-4, -6, 0);
+	eCube->GetTransform()->SetPosition(-4, -5.5, 0);
 
 	std::shared_ptr<Entity> eHelix = std::make_shared<Entity>(helix, cobblestoneMaterial);
 	eHelix->GetTransform()->SetPosition(4, -6, 0);
@@ -419,9 +419,9 @@ void Game::CreateBasicGeometry()
 	
 
 	entities.push_back(floor);
-	
-	entities.push_back(eTorus);
 	entities.push_back(eHelix);
+	entities.push_back(eTorus);
+	
 	entities.push_back(eCube);
 	
 	
@@ -432,7 +432,7 @@ void Game::CreateBasicGeometry()
 
 		std::shared_ptr<Material> mat = std::make_shared<Material>(pipelineState, XMFLOAT3(RandomRange(0.0f, 1.0f), RandomRange(0.0f, 1.0f), RandomRange(0.0f, 1.0f)), XMFLOAT2(1, 1), XMFLOAT2(0, 0));
 		std::shared_ptr<Entity> eSphere = std::make_shared<Entity>(sphere, mat);
-		eSphere->GetTransform()->SetPosition(RandomRange(-8.0f, 9.0f), RandomRange(-3.0f, 3.0f), RandomRange(-9.0f, 9.0f));
+		eSphere->GetTransform()->SetPosition(RandomRange(-8.0f, 9.0f), RandomRange(-5.0f, 0.0f), RandomRange(-9.0f, 9.0f));
 		float sphereScalar = RandomRange(0.5f, 2.0f);
 		eSphere->GetTransform()->SetScale(sphereScalar, sphereScalar, sphereScalar);
 
@@ -477,14 +477,14 @@ void Game::Update(float deltaTime, float totalTime)
 	{
 		if(i != 0)
 		entities[i]->GetTransform()->Rotate(0, deltaTime, 0);
-		if (i == 1)
+		if (i == 2)
 		{
 			entities[i]->GetTransform()->Rotate(deltaTime, 0, 0);
 		}
 
 		if (i >= 4)
 		{
-			entities[i]->GetTransform()->MoveRelative(XMFLOAT3(sin(deltaTime + i) * .1f, 0.0, sin(deltaTime + i) * .1f));
+			entities[i]->GetTransform()->MoveRelative(XMFLOAT3(sin(deltaTime + i) * .1f, 0.0, sin(deltaTime + i) * .000000001f));
 		}
 	}
 
