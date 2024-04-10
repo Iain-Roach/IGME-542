@@ -7,6 +7,7 @@
 #include "SimpleShader.h"
 #include "Lights.h"
 #include "Sky.h"
+#include "Emitter.h"
 
 #include <DirectXMath.h>
 #include <wrl/client.h>
@@ -64,5 +65,10 @@ private:
 	
 	// Should the ImGui demo window be shown?
 	bool showUIDemoWindow;
+
+	std::vector<std::shared_ptr<Emitter>> emitterList;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilState> particleDepthState;
+	Microsoft::WRL::ComPtr<ID3D11BlendState> particleBlendState;
+	Microsoft::WRL::ComPtr<ID3D11RasterizerState> particleRasterState;
 };
 

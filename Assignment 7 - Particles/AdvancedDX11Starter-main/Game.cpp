@@ -136,6 +136,9 @@ void Game::LoadAssetsAndCreateEntities()
 	std::shared_ptr<SimplePixelShader> pixelShader		= LoadShader(SimplePixelShader, L"PixelShader.cso");
 	std::shared_ptr<SimplePixelShader> pixelShaderPBR	= LoadShader(SimplePixelShader, L"PixelShaderPBR.cso");
 	std::shared_ptr<SimplePixelShader> solidColorPS		= LoadShader(SimplePixelShader, L"SolidColorPS.cso");
+	//std::shared_ptr<SimpleVertexShader> vertexShader	= LoadShader(SimpleVertexShader, L"VertexShader.cso");
+	std::shared_ptr<SimpleVertexShader> particlesVS = LoadShader(SimpleVertexShader, L"ParticleVS.cso");
+	std::shared_ptr<SimplePixelShader> particlesPS = LoadShader(SimplePixelShader, L"ParticleShader.cso");
 	
 	std::shared_ptr<SimpleVertexShader> skyVS = LoadShader(SimpleVertexShader, L"SkyVS.cso");
 	std::shared_ptr<SimplePixelShader> skyPS  = LoadShader(SimplePixelShader, L"SkyPS.cso");
@@ -405,6 +408,46 @@ void Game::LoadAssetsAndCreateEntities()
 	lightMesh = sphereMesh;
 	lightVS = vertexShader;
 	lightPS = solidColorPS;
+
+
+
+	
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> starParticle;
+	LoadTexture(L"../../Assets/Textures/Particles/Star_09.png", starParticle);
+
+
+	std::shared_ptr<Material> testParticleMat = std::make_shared<Material>(particlesPS, particlesVS, XMFLOAT3(1, 1, 1));
+	testParticleMat->AddSampler("BasicSampler", samplerOptions);
+	testParticleMat->AddTextureSRV("Particle", starParticle);
+
+	D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+	dsDesc.DepthEnable = true;
+	dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+	dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
+	device->CreateDepthStencilState(&dsDesc, particleDepthState.GetAddressOf());
+
+	D3D11_BLEND_DESC blend = {};
+	blend.AlphaToCoverageEnable = false;
+	blend.IndependentBlendEnable = false;
+	blend.RenderTarget[0].BlendEnable = true;
+	blend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	blend.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;  
+	blend.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	blend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+	blend.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	device->CreateBlendState(&blend, particleBlendState.GetAddressOf());
+
+
+	emitterList.push_back(std::make_shared<Emitter>(100, 30, 5.0f, device,testParticleMat, DirectX::XMFLOAT3(-2, 2, 0)));
+
+
+
+
+
+
+
 }
 
 
@@ -487,6 +530,11 @@ void Game::Update(float deltaTime, float totalTime)
 	// Update the camera
 	camera->Update(deltaTime);
 
+	for (int i = 0; i < emitterList.size(); i++)
+	{
+		emitterList[i]->Update(deltaTime, totalTime);
+	}
+
 	// Check individual input
 	Input& input = Input::GetInstance();
 	if (input.KeyDown(VK_ESCAPE)) Quit();
@@ -535,6 +583,33 @@ void Game::Draw(float deltaTime, float totalTime)
 
 	// Draw the sky
 	sky->Draw(camera);
+
+
+	// Draw Particles
+
+	context->OMSetBlendState(particleBlendState.Get(), 0, 0xffffffff);
+	context->OMSetDepthStencilState(particleDepthState.Get(), 0);
+
+	for (int i = 0; i < emitterList.size(); i++)
+	{
+		emitterList[i]->Draw(context, camera, totalTime);
+	}
+
+
+	context->OMSetBlendState(0, 0, 0xffffffff);
+	context->OMSetDepthStencilState(0, 0);
+
+
+
+
+
+
+
+
+
+
+
+
 
 	// Frame END
 	// - These should happen exactly ONCE PER FRAME
