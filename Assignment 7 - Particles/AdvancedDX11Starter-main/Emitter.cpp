@@ -1,26 +1,56 @@
 #include "Emitter.h"
 
-Emitter::Emitter(Microsoft::WRL::ComPtr<ID3D11Device> device, std::shared_ptr<Material> material, int maxParticles, int particlesPerSecond, float lifetime, DirectX::XMFLOAT3 startVelocity, DirectX::XMFLOAT3 position) :
-	device(device), material(material), maxParticles(maxParticles), particlesPerSecond(particlesPerSecond), lifetime(lifetime), startVelocity(startVelocity), particles(0)
+using namespace DirectX;
+
+Emitter::Emitter(
+	Microsoft::WRL::ComPtr<ID3D11Device> device,
+	std::shared_ptr<Material> material,
+	int maxParticles,
+	int particlesPerSecond,
+	float lifetime,
+	float startSize,
+	float endSize,
+	DirectX::XMFLOAT4 startColor,
+	DirectX::XMFLOAT4 endColor,
+	bool isBox,
+	DirectX::XMFLOAT3 emitterPosition,
+	DirectX::XMFLOAT3 startVelocity,
+	DirectX::XMFLOAT3 acceleration) 
+	:
+	device(device),
+	material(material),
+	maxParticles(maxParticles),
+	particlesPerSecond(particlesPerSecond),
+	lifetime(lifetime),
+	startSize(startSize),
+	endSize(endSize),
+	startColor(startColor),
+	endColor(endColor),
+	isBox(isBox),
+	startVelocity(startVelocity),
+	acceleration(acceleration),
+	particles(0)
 {
 	secondsPerParticle = 1.0f / particlesPerSecond;
 
-	lastEmitTime = 0.0f;
+	timeSinceLastEmit = 0.0f;
 	numLiving = 0;
 	firstAliveIndex = 0;
 	firstDeadIndex = 0;
 
-	this->transform.SetPosition(position);
+	this->transform.SetPosition(emitterPosition);
 
-
+	
 	if (particles) delete[] particles;
 	indexBuffer.Reset();
 	particleDataBuffer.Reset();
 	particleDataSRV.Reset();
 
+	
 	particles = new Particle[maxParticles];
 	ZeroMemory(particles, sizeof(Particle) * maxParticles);
 
+	
 	int numIndices = maxParticles * 6;
 	unsigned int* indices = new unsigned int[numIndices];
 	int indexCount = 0;
@@ -42,8 +72,9 @@ Emitter::Emitter(Microsoft::WRL::ComPtr<ID3D11Device> device, std::shared_ptr<Ma
 	ibDesc.Usage = D3D11_USAGE_DEFAULT;
 	ibDesc.ByteWidth = sizeof(unsigned int) * maxParticles * 6;
 	device->CreateBuffer(&ibDesc, &indexData, indexBuffer.GetAddressOf());
-	delete[] indices;
+	delete[] indices; 
 
+	
 	D3D11_BUFFER_DESC allParticleBufferDesc = {};
 	allParticleBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 	allParticleBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -53,6 +84,7 @@ Emitter::Emitter(Microsoft::WRL::ComPtr<ID3D11Device> device, std::shared_ptr<Ma
 	allParticleBufferDesc.ByteWidth = sizeof(Particle) * maxParticles;
 	device->CreateBuffer(&allParticleBufferDesc, 0, particleDataBuffer.GetAddressOf());
 
+	
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -66,9 +98,19 @@ Emitter::~Emitter()
 	delete[] particles;
 }
 
+Transform* Emitter::GetTransform() 
+{ 
+	return &transform; 
+}
+std::shared_ptr<Material> Emitter::GetMaterial() 
+{ 
+	return material; 
+}
+
+
 void Emitter::Update(float dt, float currentTime)
 {
-
+	
 	if (numLiving > 0)
 	{
 		
@@ -97,91 +139,24 @@ void Emitter::Update(float dt, float currentTime)
 	}
 
 	
-	lastEmitTime += dt;
+	timeSinceLastEmit += dt;
 
-	
-	while (lastEmitTime > secondsPerParticle)
+	while (timeSinceLastEmit > secondsPerParticle)
 	{
 		SpawnParticle(currentTime);
-		lastEmitTime -= secondsPerParticle;
+		timeSinceLastEmit -= secondsPerParticle;
 	}
 }
 
-void Emitter::Draw(Microsoft::WRL::ComPtr<ID3D11DeviceContext> context, std::shared_ptr<Camera> camera, float currentTime)
+
+void Emitter::UpdateParticle(float currentTime, int index)
 {
-	D3D11_MAPPED_SUBRESOURCE mapped = {};
-	context->Map(particleDataBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	float age = currentTime - particles[index].EmitTime;
 
-
-	if (firstAliveIndex < firstDeadIndex)
-	{
-		memcpy(
-			mapped.pData,
-			particles + firstAliveIndex, 
-			sizeof(Particle) * numLiving); 
-	}
-	else
-	{
-		memcpy(
-			mapped.pData, 
-			particles, 
-			sizeof(Particle) * firstDeadIndex); 
-		memcpy(
-			(void*)((Particle*)mapped.pData + firstDeadIndex),
-			particles + firstAliveIndex,  
-			sizeof(Particle) * (maxParticles - firstAliveIndex)); 
-	}
-
-
-	context->Unmap(particleDataBuffer.Get(), 0);
-
-	UINT stride = 0;
-	UINT offset = 0;
-	ID3D11Buffer* nullBuffer = 0;
-	context->IASetVertexBuffers(0, 1, &nullBuffer, &stride, &offset);
-	context->IASetIndexBuffer(indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-
-
-	material->PrepareMaterial(&transform, camera);
-
-
-	std::shared_ptr<SimpleVertexShader> vs = material->GetVertexShader();
-	vs->SetMatrix4x4("view", camera->GetView());
-	vs->SetMatrix4x4("projection", camera->GetProjection());
-	vs->SetFloat("currentTime", currentTime);
-	vs->SetFloat("lifetime", lifetime);
 	
-	vs->CopyAllBufferData();
-
-	vs->SetShaderResourceView("ParticleData", particleDataSRV);
-
-
-	context->DrawIndexed(numLiving * 6, 0, 0);
-}
-
-Transform* Emitter::GetTransform()
-{
-	return &transform;
-}
-
-std::shared_ptr<Material> Emitter::GetMaterial()
-{
-	return material;
-}
-
-void Emitter::SetMaterial(std::shared_ptr<Material> material)
-{
-	this->material = material;
-}
-
-void Emitter::UpdateParticle(float currentTime, int i)
-{
-	float age = currentTime - particles[i].emitTime;
-
-	// Update and check for death
 	if (age >= lifetime)
 	{
-		// Recent death, so retire by moving alive count (and wrap)
+		
 		firstAliveIndex++;
 		firstAliveIndex %= maxParticles;
 		numLiving--;
@@ -193,16 +168,82 @@ void Emitter::SpawnParticle(float currentTime)
 	if (numLiving == maxParticles)
 		return;
 
-
 	int spawnIndex = firstDeadIndex;
 
-	particles[spawnIndex].emitTime = currentTime;
-	particles[spawnIndex].startPos = transform.GetPosition();
-	particles[spawnIndex].startVel = startVelocity;
+	particles[spawnIndex].EmitTime = currentTime;
+	particles[spawnIndex].StartPosition = transform.GetPosition();
 
+	// if is box then the start position needs to be moved randomly in a box
+	if (isBox)
+	{
+		int max = 2;
+		int min = -2;
+		particles[spawnIndex].StartPosition.x += ((float)rand() / RAND_MAX * (max - min) + min);
+		particles[spawnIndex].StartPosition.y += ((float)rand() / RAND_MAX * (max - min) + min);
+		particles[spawnIndex].StartPosition.z += ((float)rand() / RAND_MAX * (max - min) + min);
+	}
+	
+
+	
+	particles[spawnIndex].StartVelocity = startVelocity;
 
 	firstDeadIndex++;
 	firstDeadIndex %= maxParticles; 
 
 	numLiving++;
 }
+
+void Emitter::Draw(Microsoft::WRL::ComPtr<ID3D11DeviceContext> context, std::shared_ptr<Camera> camera, float currentTime)
+{
+	D3D11_MAPPED_SUBRESOURCE mapped = {};
+	context->Map(particleDataBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+
+	if (firstAliveIndex < firstDeadIndex)
+	{
+		memcpy(
+			mapped.pData,
+			particles + firstAliveIndex,
+			sizeof(Particle) * numLiving);
+	}
+	else
+	{
+		memcpy(
+			mapped.pData, 
+			particles, 
+			sizeof(Particle) * firstDeadIndex);
+		memcpy(
+			(void*)((Particle*)mapped.pData + firstDeadIndex),
+			particles + firstAliveIndex, 
+			sizeof(Particle) * (maxParticles - firstAliveIndex)); 
+	}
+
+	context->Unmap(particleDataBuffer.Get(), 0);
+
+	UINT stride = 0;
+	UINT offset = 0;
+	ID3D11Buffer* nullBuffer = 0;
+	context->IASetVertexBuffers(0, 1, &nullBuffer, &stride, &offset);
+	context->IASetIndexBuffer(indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+
+	material->PrepareMaterial(&transform, camera);
+
+	std::shared_ptr<SimpleVertexShader> vs = material->GetVertexShader();
+	vs->SetMatrix4x4("view", camera->GetView());
+	vs->SetMatrix4x4("projection", camera->GetProjection());
+	vs->SetFloat("currentTime", currentTime);
+	vs->SetFloat("lifetime", lifetime);
+	vs->SetFloat3("acceleration", acceleration);
+	vs->SetFloat("startSize", startSize);
+	vs->SetFloat("endSize", endSize);
+	vs->SetFloat4("startColor", startColor);
+	vs->SetFloat4("endColor", endColor);
+	vs->CopyAllBufferData();
+
+	vs->SetShaderResourceView("ParticleData", particleDataSRV);
+
+
+	context->DrawIndexed(numLiving * 6, 0, 0);
+}
+
+
+

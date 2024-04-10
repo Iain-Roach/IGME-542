@@ -413,12 +413,26 @@ void Game::LoadAssetsAndCreateEntities()
 
 	
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> starParticle;
-	LoadTexture(L"../../Assets/Textures/Particles/Star_09.png", starParticle);
+	LoadTexture(L"../../Assets/Textures/Particles/star_09.png", starParticle);
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>  sparkParticle;
+	LoadTexture(L"../../Assets/Textures/Particles/spark_04.png", sparkParticle);
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>  traceParticle;
+	LoadTexture(L"../../Assets/Textures/Particles/trace_05.png", traceParticle);
 
 
 	std::shared_ptr<Material> testParticleMat = std::make_shared<Material>(particlesPS, particlesVS, XMFLOAT3(1, 1, 1));
 	testParticleMat->AddSampler("BasicSampler", samplerOptions);
 	testParticleMat->AddTextureSRV("Particle", starParticle);
+
+	std::shared_ptr<Material> sparkMat = std::make_shared<Material>(particlesPS, particlesVS, XMFLOAT3(1, 1, 1));
+	sparkMat->AddSampler("BasicSampler", samplerOptions);
+	sparkMat->AddTextureSRV("Particle", sparkParticle);
+
+	std::shared_ptr<Material> traceMat = std::make_shared<Material>(particlesPS, particlesVS, XMFLOAT3(1, 1, 1));
+	traceMat->AddSampler("BasicSampler", samplerOptions);
+	traceMat->AddTextureSRV("Particle", traceParticle);
 
 	D3D11_DEPTH_STENCIL_DESC dsDesc = {};
 	dsDesc.DepthEnable = true;
@@ -437,15 +451,68 @@ void Game::LoadAssetsAndCreateEntities()
 	blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
 	blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
 	blend.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+	//D3D11_BLEND_DESC blend = {};
+	//blend.RenderTarget[0].BlendEnable = true;
+	//blend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD; // Add both colors
+	//blend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD; // Add both alpha values
+	//blend.RenderTarget[0].SrcBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	//blend.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	//blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	//blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+	//blend.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+
+
+
+
+
 	device->CreateBlendState(&blend, particleBlendState.GetAddressOf());
 
+	
 
 	emitterList.push_back(std::make_shared<Emitter>(
 		device,
 		testParticleMat, 
-		160, 
+		180, 
 		30, 
-		5.0f));
+		5.0f,
+		1.0f,
+		4.0f,
+		XMFLOAT4(0.2, 0.1f, 0.1f, 0.7f),	
+		XMFLOAT4(.2, 0.6f, 0.1f, 0),
+		false));
+
+	emitterList.push_back(std::make_shared<Emitter>(
+		device,
+		sparkMat,
+		15,
+		3,
+		5.0f,
+		1.0f,
+		4.0f,
+		XMFLOAT4(0.2, 0.2f, 0.6f, 1.0f),
+		XMFLOAT4(.4, 0.6f, 0.1f, 0.3f),
+		true,
+		XMFLOAT3(-5.0f, 0, 0),
+		XMFLOAT3(0, -0.1, 0)));
+
+
+	emitterList.push_back(std::make_shared<Emitter>(
+		device,
+		traceMat,
+		60,
+		5,
+		7.0f,
+		1.0f,
+		2.0f,
+		XMFLOAT4(0.6, 0.1f, 0.3f, 0.0f),
+		XMFLOAT4(.8, 0.3f, 0.8f, 1.0f),
+		true,
+		XMFLOAT3(7.0f, 0, 0),
+		XMFLOAT3(0, 0.2, 0)));
+
+	
 
 
 
@@ -538,6 +605,8 @@ void Game::Update(float deltaTime, float totalTime)
 	for (int i = 0; i < emitterList.size(); i++)
 	{
 		emitterList[i]->Update(deltaTime, totalTime);
+		if(i == 0)
+		emitterList[i]->GetTransform()->MoveRelative(DirectX::XMFLOAT3(sin(totalTime) * deltaTime, 0, cos(totalTime) * deltaTime));
 	}
 
 	// Check individual input
@@ -598,11 +667,13 @@ void Game::Draw(float deltaTime, float totalTime)
 	for (int i = 0; i < emitterList.size(); i++)
 	{
 		emitterList[i]->Draw(context, camera, totalTime);
+		
 	}
-
+	
 
 	context->OMSetBlendState(0, 0, 0xffffffff);
 	context->OMSetDepthStencilState(0, 0);
+
 
 
 
