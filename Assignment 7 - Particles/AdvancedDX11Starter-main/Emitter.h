@@ -11,15 +11,16 @@ struct Particle
 {
 	float emitTime;
 	DirectX::XMFLOAT3 startPos;
-	float pad;
+	
 	DirectX::XMFLOAT3 startVel;
+	float pad;
 };
 
 
 class Emitter
 {
 public:
-	Emitter(Microsoft::WRL::ComPtr<ID3D11Device> device, std::shared_ptr<Material> material, int maxParticles, int particlesPerSecond, float lifetime, DirectX::XMFLOAT3 startVelocity = DirectX::XMFLOAT3(0, 1, 0));
+	Emitter(Microsoft::WRL::ComPtr<ID3D11Device> device, std::shared_ptr<Material> material, int maxParticles, int particlesPerSecond, float lifetime, DirectX::XMFLOAT3 startVelocity = DirectX::XMFLOAT3(0, 1, 0), DirectX::XMFLOAT3 position = DirectX::XMFLOAT3(0, 0, 0));
 	~Emitter();
 	void Update(float dt, float currentTime);
 	void Draw(Microsoft::WRL::ComPtr<ID3D11DeviceContext> context, std::shared_ptr<Camera> camera, float currentTime);

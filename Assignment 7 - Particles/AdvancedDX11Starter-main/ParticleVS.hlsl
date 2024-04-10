@@ -5,7 +5,6 @@ cbuffer externalData : register(b0)
     matrix proj;
     
     float currentTime;
-    float3 acceleration;
     
     float lifetime;
 }
@@ -14,8 +13,9 @@ struct Particle
 {
     float emitTime;
     float3 startPos;
-    float pad;
+   
     float3 startVel;
+    float pad;
 };
 
 struct VertexToPixel
@@ -50,8 +50,7 @@ VertexToPixel main(uint vertexID : SV_VertexID)
     
     //float3 pos = acceleration * age * age / 2.0 + particle.startVel * age + particle.startPos;
     
-    particle.startPos = float3(0, 0, 0);
-    float3 pos = particle.startPos + age * float3(0, 1, 0);
+    float3 pos = particle.startPos + age * particle.startVel;
     
     // calculate all the other particle data
     

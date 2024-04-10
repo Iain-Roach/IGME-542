@@ -136,9 +136,9 @@ void Game::LoadAssetsAndCreateEntities()
 	std::shared_ptr<SimplePixelShader> pixelShader		= LoadShader(SimplePixelShader, L"PixelShader.cso");
 	std::shared_ptr<SimplePixelShader> pixelShaderPBR	= LoadShader(SimplePixelShader, L"PixelShaderPBR.cso");
 	std::shared_ptr<SimplePixelShader> solidColorPS		= LoadShader(SimplePixelShader, L"SolidColorPS.cso");
-	//std::shared_ptr<SimpleVertexShader> vertexShader	= LoadShader(SimpleVertexShader, L"VertexShader.cso");
-	std::shared_ptr<SimpleVertexShader> particlesVS = LoadShader(SimpleVertexShader, L"ParticleVS.cso");
-	std::shared_ptr<SimplePixelShader> particlesPS = LoadShader(SimplePixelShader, L"ParticleShader.cso");
+	
+	std::shared_ptr<SimpleVertexShader> particlesVS		= LoadShader(SimpleVertexShader, L"ParticleVS.cso");
+	std::shared_ptr<SimplePixelShader> particlesPS		= LoadShader(SimplePixelShader, L"ParticleShader.cso");
 	
 	std::shared_ptr<SimpleVertexShader> skyVS = LoadShader(SimpleVertexShader, L"SkyVS.cso");
 	std::shared_ptr<SimplePixelShader> skyPS  = LoadShader(SimplePixelShader, L"SkyPS.cso");
@@ -431,7 +431,7 @@ void Game::LoadAssetsAndCreateEntities()
 	blend.IndependentBlendEnable = false;
 	blend.RenderTarget[0].BlendEnable = true;
 	blend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-	blend.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;  
+	blend.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA; 
 	blend.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
 	blend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
@@ -440,7 +440,12 @@ void Game::LoadAssetsAndCreateEntities()
 	device->CreateBlendState(&blend, particleBlendState.GetAddressOf());
 
 
-	emitterList.push_back(std::make_shared<Emitter>(30, 30, 5.0f, device,testParticleMat, DirectX::XMFLOAT3(-2, 2, 0)));
+	emitterList.push_back(std::make_shared<Emitter>(
+		device,
+		testParticleMat, 
+		160, 
+		30, 
+		5.0f));
 
 
 
