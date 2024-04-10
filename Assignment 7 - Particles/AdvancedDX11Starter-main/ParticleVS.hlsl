@@ -14,6 +14,7 @@ struct Particle
 {
     float emitTime;
     float3 startPos;
+    float pad;
     float3 startVel;
 };
 
@@ -47,8 +48,10 @@ VertexToPixel main(uint vertexID : SV_VertexID)
     float age = currentTime - particle.emitTime;
     float agePercentage = age / lifetime;
     
-    float3 pos = acceleration * age * age / 2.0 + particle.startVel * age + particle.startPos;
+    //float3 pos = acceleration * age * age / 2.0 + particle.startVel * age + particle.startPos;
     
+    particle.startPos = float3(0, 0, 0);
+    float3 pos = particle.startPos + age * float3(0, 1, 0);
     
     // calculate all the other particle data
     

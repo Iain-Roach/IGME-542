@@ -440,7 +440,7 @@ void Game::LoadAssetsAndCreateEntities()
 	device->CreateBlendState(&blend, particleBlendState.GetAddressOf());
 
 
-	emitterList.push_back(std::make_shared<Emitter>(100, 30, 5.0f, device,testParticleMat, DirectX::XMFLOAT3(-2, 2, 0)));
+	emitterList.push_back(std::make_shared<Emitter>(30, 30, 5.0f, device,testParticleMat, DirectX::XMFLOAT3(-2, 2, 0)));
 
 
 
