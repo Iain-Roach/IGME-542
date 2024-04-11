@@ -14,8 +14,6 @@ cbuffer externalData : register(b0)
     float lifetime;
 };
 
-// Struct representing a single particle
-// Note: the organization is due to 16-byte alignment!
 struct Particle
 {
     float EmitTime;

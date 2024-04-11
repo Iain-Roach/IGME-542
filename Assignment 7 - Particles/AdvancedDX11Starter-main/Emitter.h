@@ -31,7 +31,7 @@ public:
 		DirectX::XMFLOAT4 endColor = DirectX::XMFLOAT4(1, 1, 1, 1),
 		bool isbox = false,
 		DirectX::XMFLOAT3 emitterPosition = DirectX::XMFLOAT3(0, 0, 0),
-		DirectX::XMFLOAT3 startVelocity = DirectX::XMFLOAT3(0, 1, 0),
+		DirectX::XMFLOAT3 startVelocity = DirectX::XMFLOAT3(0, 0, 0),
 		DirectX::XMFLOAT3 acceleration = DirectX::XMFLOAT3(0, 0, 0)
 	);
 	~Emitter();
