@@ -49,37 +49,39 @@ float2 UVFromViewSpacePosition(float3 viewSpacePosition)
 
 float4 main(VertexToPixel input) : SV_TARGET
 {
-	// Sample depth first and early out for sky box
-    float pixelDepth = Depths.Sample(ClampSampler, input.uv).r;
-    if (pixelDepth == 1.0f)
-        return float4(1, 1, 1, 1);
-    // Get the view space position of this pixel
-    float3 pixelPositionViewSpace = ViewSpaceFromDepth(pixelDepth, input.uv);
-    // Sample the 4x4 random texture (assuming it holds already normalized vector3’s)
-    float3 randomDir = Random.Sample(BasicSampler, input.uv * randomTextureScreenScale).xyz;
-    // Sample normal and convert to view space
-    float3 normal = Normals.Sample(BasicSampler, input.uv).xyz * 2 - 1;
-    normal = normalize(mul((float3x3) viewMatrix, normal));
-    // Calculate TBN matrix
-    float3 tangent = normalize(randomDir - normal * dot(randomDir, normal));
-    float3 bitangent = cross(tangent, normal);
-    float3x3 TBN = float3x3(tangent, bitangent, normal);
+	//// Sample depth first and early out for sky box
+ //   float pixelDepth = Depths.Sample(ClampSampler, input.uv).r;
+ //   if (pixelDepth == 1.0f)
+ //       return float4(1, 1, 1, 1);
+ //   // Get the view space position of this pixel
+ //   float3 pixelPositionViewSpace = ViewSpaceFromDepth(pixelDepth, input.uv);
+ //   // Sample the 4x4 random texture (assuming it holds already normalized vector3’s)
+ //   float3 randomDir = Random.Sample(BasicSampler, input.uv * randomTextureScreenScale).xyz;
+ //   // Sample normal and convert to view space
+ //   float3 normal = Normals.Sample(BasicSampler, input.uv).xyz * 2 - 1;
+ //   normal = normalize(mul((float3x3) viewMatrix, normal));
+ //   // Calculate TBN matrix
+ //   float3 tangent = normalize(randomDir - normal * dot(randomDir, normal));
+ //   float3 bitangent = cross(tangent, normal);
+ //   float3x3 TBN = float3x3(tangent, bitangent, normal);
     
-    float ao = 0.0f;
-    for (int i = 0; i < ssaoSamples; i++)
-    {
-    // Rotate the offset, scale and apply to position
-        float3 samplePosView = pixelPositionViewSpace + mul(offsets[i].xyz, TBN) * ssaoRadius;
-    // Get the UV coord of this position
-        float2 samplePosScreen = UVFromViewSpacePosition(samplePosView);
-    // Sample the this nearby depth and convert to view space
-        float sampleDepth = Depths.SampleLevel(ClampSampler, samplePosScreen.xy, 0).r;
-        float sampleZ = ViewSpaceFromDepth(sampleDepth, samplePosScreen.xy).z;
-    // Compare the depths and fade result based on range (so far away objects aren’t occluded)
-        float rangeCheck = smoothstep(0.0f, 1.0f, ssaoRadius / abs(pixelPositionViewSpace.z - sampleZ));
-        ao += (sampleZ < samplePosView.z ? rangeCheck : 0.0f);
-    }
+ //   float ao = 0.0f;
+ //   for (int i = 0; i < ssaoSamples; i++)
+ //   {
+ //   // Rotate the offset, scale and apply to position
+ //       float3 samplePosView = pixelPositionViewSpace + mul(offsets[i].xyz, TBN) * ssaoRadius;
+ //   // Get the UV coord of this position
+ //       float2 samplePosScreen = UVFromViewSpacePosition(samplePosView);
+ //   // Sample the this nearby depth and convert to view space
+ //       float sampleDepth = Depths.SampleLevel(ClampSampler, samplePosScreen.xy, 0).r;
+ //       float sampleZ = ViewSpaceFromDepth(sampleDepth, samplePosScreen.xy).z;
+ //   // Compare the depths and fade result based on range (so far away objects aren’t occluded)
+ //       float rangeCheck = smoothstep(0.0f, 1.0f, ssaoRadius / abs(pixelPositionViewSpace.z - sampleZ));
+ //       ao += (sampleZ < samplePosView.z ? rangeCheck : 0.0f);
+ //   }
     
-    ao = 1.0f - ao / ssaoSamples;
-    return float4(ao.rrr, 1);
+ //   ao = 1.0f - ao / ssaoSamples;
+ //   return float4(ao.rrr, 1);
+    return float4(1, 1, 1, 0);
+
 }

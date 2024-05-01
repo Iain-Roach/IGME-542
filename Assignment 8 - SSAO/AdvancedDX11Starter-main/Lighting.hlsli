@@ -6,6 +6,12 @@
 #define LIGHT_TYPE_POINT		1
 #define LIGHT_TYPE_SPOT			2
 
+// static const float PI = 3.14159265359f;
+
+
+#define sampleStepPhi 0.025f
+#define sampleStepTheta 0.025f
+
 struct Light
 {
 	int		Type;
@@ -142,6 +148,8 @@ static const float F0_NON_METAL = 0.04f;
 static const float MIN_ROUGHNESS = 0.0000001f; // 6 zeros after decimal
 
 static const float PI = 3.14159265359f;
+static const float TWO_PI = PI * 2.0f;
+static const float PI_OVER_2 = PI / 2.0f;
 
 // Lambert diffuse BRDF - Same as the basic lighting!
 float DiffusePBR(float3 normal, float3 dirToLight)
@@ -309,5 +317,48 @@ float3 IndirectSpecular(TextureCube map, int mips, Texture2D brdfLookUp, Sampler
 	// Slack Chris about this
     return float3(0, 0, 0);
 
+}
+
+float3 IndirectDiffuse(TextureCube irrMap, SamplerState samp, float3 direction)
+{
+    float3 diff = irrMap.SampleLevel(samp, direction, 0).rgb;
+    return pow(abs(diff), 2.2);
+}
+
+float radicalInverse_VdC(uint bits)
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+
+float2 Hammersley(uint i, uint N)
+{
+    return float2(float(i) / float(N), radicalInverse_VdC(i));
+
+}
+
+float3 ImportanceSampleGGX(float2 Xi, float roughness, float3 N)
+{
+    float a = roughness * roughness;
+
+    float Phi = 2 * PI * Xi.x;
+    float CosTheta = sqrt((1 - Xi.y) / (1 + (a * a - 1) * Xi.y));
+    float SinTheta = sqrt(1 - CosTheta * CosTheta);
+
+    float3 H;
+    H.x = SinTheta * cos(Phi);
+    H.y = SinTheta * sin(Phi);
+    H.z = CosTheta;
+
+    float3 UpVector = abs(N.z) < 0.999f ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 TangentX = normalize(cross(UpVector, N));
+    float3 TangentY = cross(N, TangentX);
+
+	// Tangent to world space
+    return TangentX * H.x + TangentY * H.y + N * H.z;
 }
 #endif

@@ -46,6 +46,22 @@ private:
 
 	// Texture related resources
 	Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions;
+	Microsoft::WRL::ComPtr<ID3D11SamplerState> clampSamplerOptions;
+
+	
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sceneNormalsRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sceneNormalsSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sceneColorsRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sceneColorsSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sceneAmbientRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sceneAmbientSRV;
+	
+
+	std::shared_ptr<SimpleVertexShader> fullscreenVS;
+	std::shared_ptr<SimplePixelShader> solidColorPS;
+	std::shared_ptr<SimplePixelShader> simpleTexturePS;
 
 	// Skybox
 	std::shared_ptr<Sky> sky;

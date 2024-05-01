@@ -42,10 +42,14 @@ struct VertexToPixel
 
 struct PS_Output
 {
-    float4 colorNoAmbient : SV_TARGET0;
-    float4 ambientColor : SV_TARGET1;
-    float4 normals : SV_TARGET2;
-    float depths : SV_TARGET3;
+    float4 color : SV_TARGET0; // Render target index 0
+    float4 normals : SV_TARGET1; // Index 1
+    float4 ambientColor : SV_Target2;
+    
+    //float4 colorNoAmbient : SV_TARGET0;
+    //float4 ambientColor : SV_TARGET1;
+    //float4 normals : SV_TARGET2;
+    //float depths : SV_TARGET3;
 };
 
 
@@ -54,11 +58,18 @@ Texture2D Albedo			: register(t0);
 Texture2D NormalMap			: register(t1);
 Texture2D RoughnessMap		: register(t2);
 Texture2D MetalMap			: register(t3);
+
+// Indirect
+TextureCube IrradianceIBLMap : register(t4);
+
+
+
 SamplerState BasicSampler	: register(s0);
+SamplerState ClampSampler : register(s1);
 
 
 // Entry point for this pixel shader
-float4 main(VertexToPixel input) : SV_TARGET
+PS_Output main(VertexToPixel input) : SV_TARGET
 {
 	// Always re-normalize interpolated direction vectors
 	input.normal = normalize(input.normal);
@@ -106,21 +117,26 @@ float4 main(VertexToPixel input) : SV_TARGET
 
 	// Slack Chris about indirectDiffuse etc
 	// Calculate requisite reflection vectors
-    float3 viewToCam = normalize(CameraPosition - input.worldPos);
-    float3 viewRefl = normalize(reflect(-viewToCam, input.normal));
-    float NdotV = saturate(dot(input.normal, viewToCam));
+    //float3 viewToCam = normalize(CameraPosition - input.worldPos);
+    //float3 viewRefl = normalize(reflect(-viewToCam, input.normal));
+    //float NdotV = saturate(dot(input.normal, viewToCam));
 	
-	// float3 indirectDiffuse = IndirectDiffuse(IrradianceIBLMap, BasicSampler, input.normal);
-	// float3 indirectSpecular = indirectSpecular()
-    // float3 balancedIndirectDiff = DiffuseEnergyConserve()
+    float3 indirectDiffuse = IndirectDiffuse(IrradianceIBLMap, BasicSampler, input.normal);
+	//float3 indirectSpecular = indirectSpecular()
+    //float3 balancedIndirectDiff = DiffuseEnergyConserve()
+	
+    //PS_Output output;
+    //output.colorNoAmbient = float4(pow(totalColor + indirectSpecular, 1.0f / 2.2f), 1); // No ambient!
+    //output.ambientColor = float4(pow(balancedIndirectDiff, 1.0f / 2.2f), 1); // ONLY ambient!
+    //output.normals = float4(input.normal * 0.5f + 0.5f, 1); // Pack into [0,1] range
+    //output.depths = input.screenPosition.z;
+    //return output;
 	
     PS_Output output;
-    output.colorNoAmbient = float4(pow(totalColor + indirectSpecular, 1.0f / 2.2f), 1); // No ambient!
-    output.ambientColor = float4(pow(balancedIndirectDiff, 1.0f / 2.2f), 1); // ONLY ambient!
-    output.normals = float4(input.normal * 0.5f + 0.5f, 1); // Pack into [0,1] range
-    output.depths = input.screenPosition.z;
+    output.color = float4(pow(totalColor, 1.0f / 2.2f), 1);
+    output.normals = float4(input.normal * 0.5f + 0.5f, 1);
+    output.ambientColor = float4(pow(balancedIndirectDiff, 1.0f, 2.2f), 1);
     return output;
-	
 	
 	// Gamma correction
 	// return float4(pow(totalColor, 1.0f / 2.2f), 1);

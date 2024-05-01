@@ -123,6 +123,47 @@ void Game::Init()
 		0.01f,				// Near clip
 		100.0f,				// Far clip
 		CameraProjectionType::Perspective);
+
+	D3D11_SAMPLER_DESC clampDesc = {};
+	clampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	clampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	clampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	clampDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+	clampDesc.MaxAnisotropy = 16;
+	clampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	device->CreateSamplerState(&clampDesc, clampSamplerOptions.GetAddressOf());
+
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> rtTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> sceneColorsTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ambientTexture;
+
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = windowWidth;
+	texDesc.Height = windowHeight;
+	texDesc.ArraySize = 1;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; // Need both!
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // Might occasionally use other formats
+	texDesc.MipLevels = 1; // Usually no mip chain needed for render targets
+	texDesc.MiscFlags = 0;
+	texDesc.SampleDesc.Count = 1; // Can't be zero
+	texDesc.SampleDesc.Quality = 0;
+	device->CreateTexture2D(&texDesc, 0, rtTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, sceneColorsTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
+	rtvDesc.Texture2D.MipSlice = 0; // Which mip are we rendering into?
+	rtvDesc.Format = texDesc.Format; // Same format as texture
+	device->CreateRenderTargetView(rtTexture.Get(), &rtvDesc, sceneNormalsRTV.GetAddressOf());
+	device->CreateShaderResourceView(rtTexture.Get(), 0, sceneNormalsSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(sceneColorsTexture.Get(), &rtvDesc, sceneColorsRTV.GetAddressOf());
+	device->CreateShaderResourceView(sceneColorsTexture.Get(), 0, sceneColorsSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(ambientTexture.Get(), &rtvDesc, sceneAmbientRTV.GetAddressOf());
+	device->CreateShaderResourceView(ambientTexture.Get(), 0, sceneAmbientSRV.GetAddressOf());
 }
 
 
@@ -135,10 +176,17 @@ void Game::LoadAssetsAndCreateEntities()
 	std::shared_ptr<SimpleVertexShader> vertexShader	= LoadShader(SimpleVertexShader, L"VertexShader.cso");
 	std::shared_ptr<SimplePixelShader> pixelShader		= LoadShader(SimplePixelShader, L"PixelShader.cso");
 	std::shared_ptr<SimplePixelShader> pixelShaderPBR	= LoadShader(SimplePixelShader, L"PixelShaderPBR.cso");
-	std::shared_ptr<SimplePixelShader> solidColorPS		= LoadShader(SimplePixelShader, L"SolidColorPS.cso");
+	solidColorPS = LoadShader(SimplePixelShader, L"SolidColorPS.cso");
+	simpleTexturePS = LoadShader(SimplePixelShader, L"SimpleTexturePS.cso");
 	
 	std::shared_ptr<SimpleVertexShader> skyVS = LoadShader(SimpleVertexShader, L"SkyVS.cso");
 	std::shared_ptr<SimplePixelShader> skyPS  = LoadShader(SimplePixelShader, L"SkyPS.cso");
+
+	fullscreenVS = LoadShader(SimpleVertexShader, L"FullscreenVS.cso");
+	std::shared_ptr<SimplePixelShader> ssaoPS = LoadShader(SimplePixelShader, L"SSAOPS.cso");
+	std::shared_ptr<SimplePixelShader> blurPS = LoadShader(SimplePixelShader, L"BlurSSAOPS.cso");
+	std::shared_ptr<SimplePixelShader> combinePS = LoadShader(SimplePixelShader, L"CombineSSAOPS.cso");
+
 
 	// Make the meshes
 	std::shared_ptr<Mesh> sphereMesh = std::make_shared<Mesh>(FixPath(L"../../Assets/Models/sphere.obj").c_str(), device);
@@ -200,6 +248,8 @@ void Game::LoadAssetsAndCreateEntities()
 	sampDesc.MaxAnisotropy = 16;
 	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
 	device->CreateSamplerState(&sampDesc, samplerOptions.GetAddressOf());
+
+	
 
 
 	// Create the sky using 6 images
@@ -270,6 +320,7 @@ void Game::LoadAssetsAndCreateEntities()
 	// Create PBR materials
 	std::shared_ptr<Material> cobbleMat2xPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	cobbleMat2xPBR->AddSampler("BasicSampler", samplerOptions);
+	cobbleMat2xPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	cobbleMat2xPBR->AddTextureSRV("Albedo", cobbleA);
 	cobbleMat2xPBR->AddTextureSRV("NormalMap", cobbleN);
 	cobbleMat2xPBR->AddTextureSRV("RoughnessMap", cobbleR);
@@ -277,6 +328,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> cobbleMat4xPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(4, 4));
 	cobbleMat4xPBR->AddSampler("BasicSampler", samplerOptions);
+	cobbleMat4xPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	cobbleMat4xPBR->AddTextureSRV("Albedo", cobbleA);
 	cobbleMat4xPBR->AddTextureSRV("NormalMap", cobbleN);
 	cobbleMat4xPBR->AddTextureSRV("RoughnessMap", cobbleR);
@@ -284,6 +336,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> floorMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	floorMatPBR->AddSampler("BasicSampler", samplerOptions);
+	floorMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	floorMatPBR->AddTextureSRV("Albedo", floorA);
 	floorMatPBR->AddTextureSRV("NormalMap", floorN);
 	floorMatPBR->AddTextureSRV("RoughnessMap", floorR);
@@ -291,6 +344,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> paintMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	paintMatPBR->AddSampler("BasicSampler", samplerOptions);
+	paintMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	paintMatPBR->AddTextureSRV("Albedo", paintA);
 	paintMatPBR->AddTextureSRV("NormalMap", paintN);
 	paintMatPBR->AddTextureSRV("RoughnessMap", paintR);
@@ -298,6 +352,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> scratchedMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	scratchedMatPBR->AddSampler("BasicSampler", samplerOptions);
+	scratchedMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	scratchedMatPBR->AddTextureSRV("Albedo", scratchedA);
 	scratchedMatPBR->AddTextureSRV("NormalMap", scratchedN);
 	scratchedMatPBR->AddTextureSRV("RoughnessMap", scratchedR);
@@ -305,6 +360,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> bronzeMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	bronzeMatPBR->AddSampler("BasicSampler", samplerOptions);
+	bronzeMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	bronzeMatPBR->AddTextureSRV("Albedo", bronzeA);
 	bronzeMatPBR->AddTextureSRV("NormalMap", bronzeN);
 	bronzeMatPBR->AddTextureSRV("RoughnessMap", bronzeR);
@@ -312,6 +368,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> roughMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	roughMatPBR->AddSampler("BasicSampler", samplerOptions);
+	roughMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	roughMatPBR->AddTextureSRV("Albedo", roughA);
 	roughMatPBR->AddTextureSRV("NormalMap", roughN);
 	roughMatPBR->AddTextureSRV("RoughnessMap", roughR);
@@ -319,6 +376,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	std::shared_ptr<Material> woodMatPBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
 	woodMatPBR->AddSampler("BasicSampler", samplerOptions);
+	woodMatPBR->AddSampler("ClampSampler", clampSamplerOptions);
 	woodMatPBR->AddTextureSRV("Albedo", woodA);
 	woodMatPBR->AddTextureSRV("NormalMap", woodN);
 	woodMatPBR->AddTextureSRV("RoughnessMap", woodR);
@@ -405,6 +463,13 @@ void Game::LoadAssetsAndCreateEntities()
 	lightMesh = sphereMesh;
 	lightVS = vertexShader;
 	lightPS = solidColorPS;
+
+
+	
+
+
+
+
 }
 
 
@@ -468,6 +533,53 @@ void Game::OnResize()
 	// Handle base-level DX resize stuff
 	DXCore::OnResize();
 
+	// Need to resize the render targets
+	sceneNormalsRTV.Reset();
+	sceneNormalsSRV.Reset();
+	sceneColorsRTV.Reset();
+	sceneColorsSRV.Reset();
+	sceneAmbientRTV.Reset();
+	sceneAmbientSRV.Reset();
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> rtTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> sceneColorsTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ambientTexture;
+
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = windowWidth;
+	texDesc.Height = windowHeight;
+	texDesc.ArraySize = 1;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; // Need both!
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // Might occasionally use other formats
+	texDesc.MipLevels = 1; // Usually no mip chain needed for render targets
+	texDesc.MiscFlags = 0;
+	texDesc.SampleDesc.Count = 1; // Can't be zero
+	device->CreateTexture2D(&texDesc, 0, rtTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, sceneColorsTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
+	rtvDesc.Texture2D.MipSlice = 0; // Which mip are we rendering into?
+	rtvDesc.Format = texDesc.Format; // Same format as texture
+	device->CreateRenderTargetView(rtTexture.Get(), &rtvDesc, sceneNormalsRTV.GetAddressOf());
+	device->CreateRenderTargetView(sceneColorsTexture.Get(), &rtvDesc, sceneColorsRTV.GetAddressOf());
+
+	device->CreateShaderResourceView(
+		rtTexture.Get(), // Texture resource itself
+		0, // Null description = default SRV options
+		sceneNormalsSRV.GetAddressOf()); // ComPtr<ID3D11ShaderResourceView>
+
+	device->CreateShaderResourceView(
+		sceneColorsTexture.Get(), // Texture resource itself
+		0, // Null description = default SRV options
+		sceneColorsSRV.GetAddressOf()); // ComPtr<ID3D11ShaderResourceView>
+
+
+	device->CreateRenderTargetView(ambientTexture.Get(), &rtvDesc, sceneAmbientRTV.GetAddressOf());
+	device->CreateShaderResourceView(ambientTexture.Get(), 0, sceneAmbientSRV.GetAddressOf());
+
+
 	// Update our projection matrix to match the new aspect ratio
 	if (camera)
 		camera->UpdateProjectionMatrix(this->windowWidth / (float)this->windowHeight);
@@ -505,9 +617,17 @@ void Game::Draw(float deltaTime, float totalTime)
 		// Clear the back buffer (erases what's on the screen)
 		const float bgColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; // Black
 		context->ClearRenderTargetView(backBufferRTV.Get(), bgColor);
-
+		context->ClearRenderTargetView(sceneColorsRTV.Get(), bgColor);
+		context->ClearRenderTargetView(sceneNormalsRTV.Get(), bgColor);
+		context->ClearRenderTargetView(sceneAmbientRTV.Get(), bgColor);
 		// Clear the depth buffer (resets per-pixel occlusion information)
-		context->ClearDepthStencilView(depthBufferDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+		context->ClearDepthStencilView(depthBufferDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
+		ID3D11RenderTargetView* renderTargets[3] = {};
+		renderTargets[0] = sceneColorsRTV.Get();
+		renderTargets[1] = sceneNormalsRTV.Get();
+		renderTargets[2] = sceneAmbientRTV.Get();
+		context->OMSetRenderTargets(3, renderTargets, depthBufferDSV.Get());
 	}
 
 
@@ -525,6 +645,8 @@ void Game::Draw(float deltaTime, float totalTime)
 		ps->SetFloat3("cameraPosition", camera->GetTransform()->GetPosition());
 		ps->CopyBufferData("perFrame");
 
+		ps->SetShaderResourceView("IrradianceIBLMap", sky->GetIrradianceMap());
+
 		// Draw the entity
 		ge->Draw(context, camera);
 	}
@@ -536,6 +658,14 @@ void Game::Draw(float deltaTime, float totalTime)
 	// Draw the sky
 	sky->Draw(camera);
 
+	context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), 0);
+	
+	fullscreenVS->SetShader();
+	simpleTexturePS->SetShader();
+	simpleTexturePS->SetShaderResourceView("Pixels", sceneColorsSRV);
+
+	context->Draw(3, 0);
+	
 	// Frame END
 	// - These should happen exactly ONCE PER FRAME
 	// - At the very end of the frame (after drawing *everything*)
@@ -554,6 +684,10 @@ void Game::Draw(float deltaTime, float totalTime)
 
 		// Must re-bind buffers after presenting, as they become unbound
 		context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), depthBufferDSV.Get());
+
+
+		ID3D11ShaderResourceView* nullSRVs[16] = {};
+		context->PSSetShaderResources(0, 16, nullSRVs);
 	}
 }
 
@@ -590,8 +724,8 @@ void Game::DrawPointLights()
 
 		XMFLOAT4X4 world;
 		XMFLOAT4X4 worldInvTrans;
-		XMStoreFloat4x4(&world, worldMat);
-		XMStoreFloat4x4(&worldInvTrans, XMMatrixInverse(0, XMMatrixTranspose(worldMat)));
+		DirectX::XMStoreFloat4x4(&world, worldMat);
+		DirectX::XMStoreFloat4x4(&worldInvTrans, XMMatrixInverse(0, XMMatrixTranspose(worldMat)));
 
 		// Set up the world matrix for this light
 		lightVS->SetMatrix4x4("world", world);
@@ -772,6 +906,19 @@ void Game::BuildUI()
 			}
 
 			// Finalize the tree node
+			ImGui::TreePop();
+		}
+
+		// === RenderTargets ===
+		if (ImGui::TreeNode("Render Targets"))
+		{
+			ImVec2 size = ImGui::GetItemRectSize();
+			float rtHeight = size.x * ((float)windowHeight / windowWidth);
+
+			ImGui::Image(sceneColorsSRV.Get(), ImVec2(size.x*2, rtHeight*2));
+			ImGui::Image(sceneNormalsSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			ImGui::Image(sceneAmbientSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+
 			ImGui::TreePop();
 		}
 	}

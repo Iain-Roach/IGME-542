@@ -40,6 +40,17 @@ struct VertexToPixel
 	float3 worldPos			: POSITION; // The world position of this PIXEL
 };
 
+struct PS_Output
+{
+    float4 color : SV_TARGET0; // Render target index 0
+    float4 normals : SV_TARGET1; // Index 1
+    float4 ambientColor : SV_Target2;
+    
+    //float4 colorNoAmbient : SV_TARGET0;
+    //float4 ambientColor : SV_TARGET1;
+    //float4 normals : SV_TARGET2;
+    //float depths : SV_TARGET3;
+};
 
 // Texture-related variables
 Texture2D Albedo			: register(t0);
@@ -49,7 +60,7 @@ SamplerState BasicSampler		: register(s0);
 
 
 // Entry point for this pixel shader
-float4 main(VertexToPixel input) : SV_TARGET
+PS_Output main(VertexToPixel input) : SV_TARGET
 {
 	// Always re-normalize interpolated direction vectors
 	input.normal = normalize(input.normal);
@@ -91,7 +102,12 @@ float4 main(VertexToPixel input) : SV_TARGET
 			break;
 		}
 	}
-
+    PS_Output output;
+    output.color = float4(pow(totalColor, 1.0f / 2.2f), 1);
+    output.normals = float4(input.normal * 0.5f + 0.5f, 1);
+    //output.otherData = evenMoreData;
+    return output;
+	
 	// Gamma correction
-	return float4(pow(totalColor, 1.0f / 2.2f), 1);
+	// return float4(pow(totalColor, 1.0f / 2.2f), 1);
 }
