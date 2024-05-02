@@ -824,6 +824,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		context->OMSetRenderTargets(1, renderTargets, 0);
 		blurPS->SetShader();
 		blurPS->SetShaderResourceView("SSAO", ssaoSRV);
+		blurPS->SetSamplerState("ClampSampler", clampSamplerOptions);
 		blurPS->SetFloat2("pixelSize", XMFLOAT2(1.0f / windowWidth, 1.0f / windowHeight));
 		blurPS->CopyAllBufferData();
 		context->Draw(3, 0);
@@ -835,6 +836,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		combinePS->SetShaderResourceView("SceneColorsNoAmbient", sceneColorsSRV);
 		combinePS->SetShaderResourceView("Ambient", sceneAmbientSRV);
 		combinePS->SetShaderResourceView("SSAOBlur", blurSRV);
+		combinePS->SetSamplerState("BasicSampler", samplerOptions);
 		combinePS->SetFloat2("pixelSize", XMFLOAT2(1.0f / windowWidth, 1.0f / windowHeight));
 		combinePS->CopyAllBufferData();
 		context->Draw(3, 0);

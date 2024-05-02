@@ -48,11 +48,6 @@ struct PS_Output
     float4 normals : SV_TARGET1; // Index 1
     float4 ambientColor : SV_Target2;
     float depths : SV_Target3;
-    
-    //float4 colorNoAmbient : SV_TARGET0;
-    //float4 ambientColor : SV_TARGET1;
-    //float4 normals : SV_TARGET2;
-    //float depths : SV_TARGET3;
 };
 
 
