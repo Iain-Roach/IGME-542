@@ -72,6 +72,7 @@ public:
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetIrradianceMap();
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetSpecularMap();
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetBRDFLookUpTexture();
+	int GetTotalSpecularIBLMipLevels();
 
 	void Draw(std::shared_ptr<Camera> camera);
 

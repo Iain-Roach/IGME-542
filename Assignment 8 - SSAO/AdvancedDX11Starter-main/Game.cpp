@@ -137,6 +137,9 @@ void Game::Init()
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> rtTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> sceneColorsTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> ambientTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ssaoTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ssaoBlurTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> depthTexture;
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.Width = windowWidth;
@@ -151,6 +154,9 @@ void Game::Init()
 	device->CreateTexture2D(&texDesc, 0, rtTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, sceneColorsTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ssaoTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ssaoBlurTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
@@ -164,6 +170,79 @@ void Game::Init()
 
 	device->CreateRenderTargetView(ambientTexture.Get(), &rtvDesc, sceneAmbientRTV.GetAddressOf());
 	device->CreateShaderResourceView(ambientTexture.Get(), 0, sceneAmbientSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(ssaoTexture.Get(), &rtvDesc, ssaoRTV.GetAddressOf());
+	device->CreateShaderResourceView(ssaoTexture.Get(), 0, ssaoSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(ssaoBlurTexture.Get(), &rtvDesc, blurRTV.GetAddressOf());
+	device->CreateShaderResourceView(ssaoBlurTexture.Get(), 0, blurSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(depthTexture.Get(), &rtvDesc, depthRTV.GetAddressOf());
+	device->CreateShaderResourceView(depthTexture.Get(), 0, depthSRV.GetAddressOf());
+
+
+	// Random SSAO Texture
+	const int textureSize = 4;
+	const int totalPixels = textureSize * textureSize;
+
+	XMFLOAT4 randomPixels[totalPixels] = {};
+	for (int i = 0; i < totalPixels; i++)
+	{
+		XMVECTOR randomVec = XMVectorSet(RandomRange(-1, 1), RandomRange(-1, 1), 0, 0);
+		XMStoreFloat4(&randomPixels[i], XMVector3Normalize(randomVec));
+	}
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ssaoTex;
+	D3D11_TEXTURE2D_DESC tDesc = {};
+	tDesc.Width = textureSize;
+	tDesc.Height = textureSize;
+	tDesc.ArraySize = 1;
+	tDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	tDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	tDesc.MipLevels = 1;
+	tDesc.SampleDesc.Count = 1;
+
+	D3D11_SUBRESOURCE_DATA data = {};
+	data.pSysMem = randomPixels;
+	data.SysMemPitch = sizeof(float) * 4 * textureSize;
+
+	device->CreateTexture2D(&tDesc, &data, ssaoTex.GetAddressOf());
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Format = tDesc.Format;
+	srvDesc.Texture2D.MipLevels = 1;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
+	device->CreateShaderResourceView(ssaoTex.Get(), &srvDesc, randomTexSRV.GetAddressOf());
+	
+
+	// Want to save above texture and srv to game.h probably
+
+
+	// Set up the array of ssao offset vectors (count must match shader!)
+	for (int i = 0; i < 64; i++)
+	{
+		// Offsets should be in hemisphere ([-1,1], [-1,1], [0,1])
+		// Note: Must be stored as float4’s due to cbuffer data packing!
+		ssaoOffsets[i] = XMFLOAT4(
+			(float)rand() / RAND_MAX * 2 - 1, // -1 to 1
+			(float)rand() / RAND_MAX * 2 - 1, // -1 to 1
+			(float)rand() / RAND_MAX, // 0 to 1
+			0);
+		XMVECTOR offset = XMVector3Normalize(XMLoadFloat4(&ssaoOffsets[i]));
+		// Scale over the array, such that more of the values are
+		// closer to the minimum than the maximum (see image -->)
+		float scale = (float)i / 64;
+		XMVECTOR acceleratedScale = XMVectorLerp(
+			XMVectorSet(0.1f, 0.1f, 0.1f, 1),
+			XMVectorSet(1, 1, 1, 1),
+			scale * scale);
+		XMStoreFloat4(&ssaoOffsets[i], offset * acceleratedScale);
+	}
+
+
 }
 
 
@@ -183,9 +262,13 @@ void Game::LoadAssetsAndCreateEntities()
 	std::shared_ptr<SimplePixelShader> skyPS  = LoadShader(SimplePixelShader, L"SkyPS.cso");
 
 	fullscreenVS = LoadShader(SimpleVertexShader, L"FullscreenVS.cso");
-	std::shared_ptr<SimplePixelShader> ssaoPS = LoadShader(SimplePixelShader, L"SSAOPS.cso");
-	std::shared_ptr<SimplePixelShader> blurPS = LoadShader(SimplePixelShader, L"BlurSSAOPS.cso");
-	std::shared_ptr<SimplePixelShader> combinePS = LoadShader(SimplePixelShader, L"CombineSSAOPS.cso");
+	ssaoPS = LoadShader(SimplePixelShader, L"SSAOPS.cso");
+	blurPS = LoadShader(SimplePixelShader, L"BlurSSAOPS.cso");
+	combinePS = LoadShader(SimplePixelShader, L"CombineSSAOPS.cso");
+
+	std::shared_ptr<SimplePixelShader> specConvPS = LoadShader(SimplePixelShader, L"SpecularConvolution.cso");
+	std::shared_ptr<SimplePixelShader> brdfPS = LoadShader(SimplePixelShader, L"BrdfLookUpTablePS.cso");
+	std::shared_ptr<SimplePixelShader> irrPS = LoadShader(SimplePixelShader, L"IrradianceMapPS.cso");
 
 
 	// Make the meshes
@@ -265,7 +348,9 @@ void Game::LoadAssetsAndCreateEntities()
 		skyPS,
 		samplerOptions,
 		device,
-		context);
+		context,
+		fullscreenVS,
+		irrPS, specConvPS, brdfPS);
 
 	// Create non-PBR materials
 	std::shared_ptr<Material> cobbleMat2x = std::make_shared<Material>(pixelShader, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
@@ -541,9 +626,17 @@ void Game::OnResize()
 	sceneAmbientRTV.Reset();
 	sceneAmbientSRV.Reset();
 
+	ssaoRTV.Reset();
+	ssaoSRV.Reset();
+	blurRTV.Reset();
+	blurSRV.Reset();
+
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> rtTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> sceneColorsTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> ambientTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ssaoTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> ssaoBlurTexture;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> depthTexture;
 
 	D3D11_TEXTURE2D_DESC texDesc = {};
 	texDesc.Width = windowWidth;
@@ -557,6 +650,9 @@ void Game::OnResize()
 	device->CreateTexture2D(&texDesc, 0, rtTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, sceneColorsTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ssaoTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, ssaoBlurTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
@@ -578,6 +674,18 @@ void Game::OnResize()
 
 	device->CreateRenderTargetView(ambientTexture.Get(), &rtvDesc, sceneAmbientRTV.GetAddressOf());
 	device->CreateShaderResourceView(ambientTexture.Get(), 0, sceneAmbientSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(ssaoTexture.Get(), &rtvDesc, ssaoRTV.GetAddressOf());
+	device->CreateShaderResourceView(ssaoTexture.Get(), 0, ssaoSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(ssaoBlurTexture.Get(), &rtvDesc, blurRTV.GetAddressOf());
+	device->CreateShaderResourceView(ssaoBlurTexture.Get(), 0, blurSRV.GetAddressOf());
+
+	device->CreateRenderTargetView(depthTexture.Get(), &rtvDesc, depthRTV.GetAddressOf());
+	device->CreateShaderResourceView(depthTexture.Get(), 0, depthSRV.GetAddressOf());
+
+
+	
 
 
 	// Update our projection matrix to match the new aspect ratio
@@ -620,14 +728,16 @@ void Game::Draw(float deltaTime, float totalTime)
 		context->ClearRenderTargetView(sceneColorsRTV.Get(), bgColor);
 		context->ClearRenderTargetView(sceneNormalsRTV.Get(), bgColor);
 		context->ClearRenderTargetView(sceneAmbientRTV.Get(), bgColor);
+		context->ClearRenderTargetView(depthRTV.Get(), bgColor);
 		// Clear the depth buffer (resets per-pixel occlusion information)
 		context->ClearDepthStencilView(depthBufferDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-		ID3D11RenderTargetView* renderTargets[3] = {};
+		ID3D11RenderTargetView* renderTargets[4] = {};
 		renderTargets[0] = sceneColorsRTV.Get();
 		renderTargets[1] = sceneNormalsRTV.Get();
 		renderTargets[2] = sceneAmbientRTV.Get();
-		context->OMSetRenderTargets(3, renderTargets, depthBufferDSV.Get());
+		renderTargets[3] = depthRTV.Get();
+		context->OMSetRenderTargets(4, renderTargets, depthBufferDSV.Get());
 	}
 
 
@@ -646,6 +756,11 @@ void Game::Draw(float deltaTime, float totalTime)
 		ps->CopyBufferData("perFrame");
 
 		ps->SetShaderResourceView("IrradianceIBLMap", sky->GetIrradianceMap());
+		ps->SetShaderResourceView("SpecularIBLMap", sky->GetSpecularMap());
+		ps->SetShaderResourceView("BrdfLookUpMap", sky->GetBRDFLookUpTexture());
+		ps->SetSamplerState("BasicSampler", samplerOptions);
+		ps->SetSamplerState("ClampSampler", clampSamplerOptions);
+		ps->SetInt("specIBLTotalMipLevels", sky->GetTotalSpecularIBLMipLevels());
 
 		// Draw the entity
 		ge->Draw(context, camera);
@@ -658,14 +773,84 @@ void Game::Draw(float deltaTime, float totalTime)
 	// Draw the sky
 	sky->Draw(camera);
 
-	context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), 0);
 	
+	/*context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), 0);
+
 	fullscreenVS->SetShader();
 	simpleTexturePS->SetShader();
 	simpleTexturePS->SetShaderResourceView("Pixels", sceneColorsSRV);
 
-	context->Draw(3, 0);
+	context->Draw(3, 0);*/
+
+
+
+
+	// SSAO POST PROCESSING
+	{
+		const int numTargets = 4;
+		ID3D11RenderTargetView* renderTargets[4] = {};
+		context->OMSetRenderTargets(4, renderTargets, 0);
+
+		fullscreenVS->SetShader();
+
+		context->OMSetRenderTargets(1, ssaoRTV.GetAddressOf(), 0);
+
+		// SSAO RESULTS
+		ssaoPS->SetShader();
+		
+		XMFLOAT4X4 invView, invProj, view = camera->GetView(), proj = camera->GetProjection();
+		XMStoreFloat4x4(&invView, XMMatrixInverse(0, XMLoadFloat4x4(&view)));
+		XMStoreFloat4x4(&invProj, XMMatrixInverse(0, XMLoadFloat4x4(&proj)));
+		ssaoPS->SetMatrix4x4("invViewMatrix", invView);
+		ssaoPS->SetMatrix4x4("invProjMatrix", invProj);
+		ssaoPS->SetMatrix4x4("viewMatrix", view);
+		ssaoPS->SetMatrix4x4("projectionMatrix", proj);
+		ssaoPS->SetData("offsets", ssaoOffsets, sizeof(XMFLOAT4) * ARRAYSIZE(ssaoOffsets));
+		ssaoPS->SetFloat("ssaoRadius", 1.0f);
+		ssaoPS->SetInt("ssaoSamples", 64);
+		ssaoPS->SetFloat2("randomTextureScreenScale", XMFLOAT2(windowWidth / 4.0f, windowHeight / 4.0f));
+		ssaoPS->CopyAllBufferData();
+
+		ssaoPS->SetShaderResourceView("Normals", sceneNormalsSRV);
+		ssaoPS->SetShaderResourceView("Depths", depthSRV);
+		ssaoPS->SetShaderResourceView("Random", randomTexSRV);
+		ssaoPS->SetSamplerState("BasicSampler", samplerOptions);
+		ssaoPS->SetSamplerState("ClampSampler", clampSamplerOptions);
+
+		context->Draw(3, 0);
+
+
+		renderTargets[0] = ssaoRTV.Get();
+		context->OMSetRenderTargets(1, renderTargets, 0);
+		blurPS->SetShader();
+		blurPS->SetShaderResourceView("SSAO", ssaoSRV);
+		blurPS->SetFloat2("pixelSize", XMFLOAT2(1.0f / windowWidth, 1.0f / windowHeight));
+		blurPS->CopyAllBufferData();
+		context->Draw(3, 0);
+
+		renderTargets[0] = backBufferRTV.Get();
+		context->OMSetRenderTargets(1, renderTargets, 0);
+
+		combinePS->SetShader();
+		combinePS->SetShaderResourceView("SceneColorsNoAmbient", sceneColorsSRV);
+		combinePS->SetShaderResourceView("Ambient", sceneAmbientSRV);
+		combinePS->SetShaderResourceView("SSAOBlur", blurSRV);
+		combinePS->SetFloat2("pixelSize", XMFLOAT2(1.0f / windowWidth, 1.0f / windowHeight));
+		combinePS->CopyAllBufferData();
+		context->Draw(3, 0);
+
+
+
+		context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), 0);
+
+		
+	}
+
+	ID3D11ShaderResourceView* nullSRVs[128] = {};
+	context->PSSetShaderResources(0, 128, nullSRVs);
 	
+
+
 	// Frame END
 	// - These should happen exactly ONCE PER FRAME
 	// - At the very end of the frame (after drawing *everything*)
@@ -685,9 +870,8 @@ void Game::Draw(float deltaTime, float totalTime)
 		// Must re-bind buffers after presenting, as they become unbound
 		context->OMSetRenderTargets(1, backBufferRTV.GetAddressOf(), depthBufferDSV.Get());
 
+		
 
-		ID3D11ShaderResourceView* nullSRVs[16] = {};
-		context->PSSetShaderResources(0, 16, nullSRVs);
 	}
 }
 
@@ -915,9 +1099,14 @@ void Game::BuildUI()
 			ImVec2 size = ImGui::GetItemRectSize();
 			float rtHeight = size.x * ((float)windowHeight / windowWidth);
 
-			ImGui::Image(sceneColorsSRV.Get(), ImVec2(size.x*2, rtHeight*2));
+			ImGui::Image(sceneColorsSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(sceneNormalsSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(sceneAmbientSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			ImGui::Image(depthSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			//ImGui::Image(randomTexSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			ImGui::Image(ssaoSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			ImGui::Image(blurSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+			//ImGui::Image(backBufferRTV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 
 			ImGui::TreePop();
 		}

@@ -57,11 +57,28 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> sceneAmbientRTV;
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> sceneAmbientSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> ssaoRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> ssaoSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> blurRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> blurSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> depthRTV;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> depthSRV;
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> randomTexSRV;
 	
 
 	std::shared_ptr<SimpleVertexShader> fullscreenVS;
 	std::shared_ptr<SimplePixelShader> solidColorPS;
 	std::shared_ptr<SimplePixelShader> simpleTexturePS;
+
+	std::shared_ptr<SimplePixelShader> ssaoPS;
+	std::shared_ptr<SimplePixelShader> blurPS;
+	std::shared_ptr<SimplePixelShader> combinePS;
+
+	DirectX::XMFLOAT4 ssaoOffsets[64];
 
 	// Skybox
 	std::shared_ptr<Sky> sky;

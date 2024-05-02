@@ -26,6 +26,8 @@ cbuffer perFrame : register(b1)
 
 	// Needed for specular (reflection) calculation
 	float3 cameraPosition;
+	
+    int specIBLTotalMipLevels;
 };
 
 
@@ -45,6 +47,7 @@ struct PS_Output
     float4 color : SV_TARGET0; // Render target index 0
     float4 normals : SV_TARGET1; // Index 1
     float4 ambientColor : SV_Target2;
+    float depths : SV_TARGET3;
     
     //float4 colorNoAmbient : SV_TARGET0;
     //float4 ambientColor : SV_TARGET1;
@@ -56,7 +59,15 @@ struct PS_Output
 Texture2D Albedo			: register(t0);
 Texture2D NormalMap			: register(t1);
 Texture2D RoughnessMap		: register(t2);
+
+// Indirect
+Texture2D BrdfLookUpMap : register(t4);
+TextureCube IrradianceIBLMap : register(t5);
+TextureCube SpecularIBLMap : register(t6);
+
+
 SamplerState BasicSampler		: register(s0);
+SamplerState ClampSampler : register(s1);
 
 
 // Entry point for this pixel shader
@@ -102,11 +113,39 @@ PS_Output main(VertexToPixel input) : SV_TARGET
 			break;
 		}
 	}
+	// Calculate requisite reflection vectors
+    float3 viewToCam = normalize(cameraPosition - input.worldPos);
+    float3 viewRefl = normalize(reflect(-viewToCam, input.normal));
+    float NdotV = saturate(dot(input.normal, viewToCam));
+	// Indirect lighting
+    float3 indirectDiffuse = IndirectDiffuse(IrradianceIBLMap, BasicSampler, input.normal);
+  //  float3 indirectSpecular = IndirectSpecular(
+		//SpecularIBLMap, specIBLTotalMipLevels,
+		//BrdfLookUpMap, ClampSampler, // MUST use the clamp sampler here!
+		//viewRefl, NdotV,
+		//roughness, specColor);
+	// Balance indirect diff/spec
+    //float3 balancedDiff = DiffuseEnergyConserve(indirectDiffuse, specColor, metal);
+    //float3 fullIndirect = indirectSpecular + balancedDiff * surfaceColor.rgb;
+	// Add the indirect to the direct
+    //totalColor += fullIndirect;
+	
+	
     PS_Output output;
     output.color = float4(pow(totalColor, 1.0f / 2.2f), 1);
     output.normals = float4(input.normal * 0.5f + 0.5f, 1);
-    //output.otherData = evenMoreData;
+    output.ambientColor = float4(pow(indirectDiffuse, 1.0f / 2.2f), 1);
+    output.depths = input.screenPosition.z;
     return output;
+	
+	
+	
+	
+    //PS_Output output;
+    //output.color = float4(pow(totalColor, 1.0f / 2.2f), 1);
+    //output.normals = float4(input.normal * 0.5f + 0.5f, 1);
+    ////output.otherData = evenMoreData;
+    //return output;
 	
 	// Gamma correction
 	// return float4(pow(totalColor, 1.0f / 2.2f), 1);

@@ -131,6 +131,11 @@ Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Sky::GetBRDFLookUpTexture()
 	return brdfMap;
 }
 
+int Sky::GetTotalSpecularIBLMipLevels()
+{
+	return totalSpecIBLMipLevels;
+}
+
 void Sky::Draw(std::shared_ptr<Camera> camera)
 {
 	// Change to the sky-specific rasterizer state

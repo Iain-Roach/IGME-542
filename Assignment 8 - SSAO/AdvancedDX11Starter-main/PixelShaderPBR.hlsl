@@ -26,6 +26,8 @@ cbuffer perFrame : register(b1)
 
 	// Needed for specular (reflection) calculation
 	float3 cameraPosition;
+	
+    int specIBLTotalMipLevels;
 };
 
 
@@ -45,6 +47,7 @@ struct PS_Output
     float4 color : SV_TARGET0; // Render target index 0
     float4 normals : SV_TARGET1; // Index 1
     float4 ambientColor : SV_Target2;
+    float depths : SV_Target3;
     
     //float4 colorNoAmbient : SV_TARGET0;
     //float4 ambientColor : SV_TARGET1;
@@ -60,7 +63,9 @@ Texture2D RoughnessMap		: register(t2);
 Texture2D MetalMap			: register(t3);
 
 // Indirect
-TextureCube IrradianceIBLMap : register(t4);
+Texture2D BrdfLookUpMap : register(t4);
+TextureCube IrradianceIBLMap : register(t5);
+TextureCube SpecularIBLMap : register(t6);
 
 
 
@@ -115,15 +120,22 @@ PS_Output main(VertexToPixel input) : SV_TARGET
 		}
 	}
 
-	// Slack Chris about indirectDiffuse etc
 	// Calculate requisite reflection vectors
-    //float3 viewToCam = normalize(CameraPosition - input.worldPos);
-    //float3 viewRefl = normalize(reflect(-viewToCam, input.normal));
-    //float NdotV = saturate(dot(input.normal, viewToCam));
-	
+    float3 viewToCam = normalize(cameraPosition - input.worldPos);
+    float3 viewRefl = normalize(reflect(-viewToCam, input.normal));
+    float NdotV = saturate(dot(input.normal, viewToCam));
+	// Indirect lighting
     float3 indirectDiffuse = IndirectDiffuse(IrradianceIBLMap, BasicSampler, input.normal);
-	//float3 indirectSpecular = indirectSpecular()
-    //float3 balancedIndirectDiff = DiffuseEnergyConserve()
+    float3 indirectSpecular = IndirectSpecular(
+		SpecularIBLMap, specIBLTotalMipLevels,
+		BrdfLookUpMap, ClampSampler, // MUST use the clamp sampler here!
+		viewRefl, NdotV,
+		roughness, specColor);
+	// Balance indirect diff/spec
+    float3 balancedDiff = DiffuseEnergyConserve(indirectDiffuse, specColor, metal);
+    float3 fullIndirect = indirectSpecular + balancedDiff * surfaceColor.rgb;
+	// Add the indirect to the direct
+    totalColor += fullIndirect;
 	
     //PS_Output output;
     //output.colorNoAmbient = float4(pow(totalColor + indirectSpecular, 1.0f / 2.2f), 1); // No ambient!
@@ -135,7 +147,8 @@ PS_Output main(VertexToPixel input) : SV_TARGET
     PS_Output output;
     output.color = float4(pow(totalColor, 1.0f / 2.2f), 1);
     output.normals = float4(input.normal * 0.5f + 0.5f, 1);
-    output.ambientColor = float4(pow(balancedIndirectDiff, 1.0f, 2.2f), 1);
+    output.ambientColor = float4(pow(balancedDiff, 1.0f / 2.2f), 1);
+    output.depths = input.screenPosition.z;
     return output;
 	
 	// Gamma correction

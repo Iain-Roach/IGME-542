@@ -253,7 +253,7 @@ float3 MicrofacetBRDF(float3 n, float3 l, float3 v, float roughness, float metal
 //
 // Metals should have an albedo of (0,0,0)...mostly
 // See slide 65: http://blog.selfshadow.com/publications/s2014-shading-course/hoffman/s2014_pbs_physics_math_slides.pdf
-float3 DiffuseEnergyConserve(float diffuse, float3 specular, float metalness)
+float3 DiffuseEnergyConserve(float3 diffuse, float3 specular, float metalness)
 {
 	return diffuse * ((1 - saturate(specular)) * (1 - metalness));
 }
@@ -312,10 +312,17 @@ float3 SpotLightPBR(Light light, float3 normal, float3 worldPos, float3 camPos, 
 	return PointLightPBR(light, normal, worldPos, camPos, roughness, metalness, surfaceColor, specularColor) * penumbra;
 }
 
-float3 IndirectSpecular(TextureCube map, int mips, Texture2D brdfLookUp, SamplerState samp, float3 viewRefl, float NdotV, float roughness, float3 specColor)
+float3 IndirectSpecular(TextureCube envMap, int mips, Texture2D brdfLookUp, SamplerState samp, float3 viewRefl, float NdotV, float roughness, float3 specColor)
 {
-	// Slack Chris about this
-    return float3(0, 0, 0);
+	// Ensure roughness isn't zero
+    roughness = max(roughness, MIN_ROUGHNESS);
+	// Calculate half of the split-sum approx (this texture is not gamma-corrected, as it just holds raw data)
+    float2 indirectBRDF = brdfLookUp.Sample(samp, float2(NdotV, roughness)).rg;
+    float3 indSpecFresnel = specColor * indirectBRDF.x + indirectBRDF.y; // Spec color is f0
+	// Sample the convolved environment map (other half of split-sum)
+    float3 envSample = envMap.SampleLevel(samp, viewRefl, roughness * (mips - 1)).rgb;
+	// Adjust environment sample by fresnel
+    return pow(abs(envSample), 2.2) * indSpecFresnel;
 
 }
 
