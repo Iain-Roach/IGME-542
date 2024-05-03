@@ -50,6 +50,8 @@ Game::Game(HINSTANCE hInstance)
 	showUIDemoWindow(false),
 	showPointLights(false)
 {
+	ssaoSamples = 64;
+	ssaoRadius = 1.0f;
 	// Seed random
 	srand((unsigned int)time(0));
 
@@ -101,7 +103,7 @@ void Game::Init()
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set up lights initially
-	lightCount = 64;
+	lightCount = 1;
 	GenerateLights();
 
 	// Set initial graphics API state
@@ -156,12 +158,26 @@ void Game::Init()
 	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ssaoTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ssaoBlurTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
-	device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	// device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+
+	//texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	D3D11_TEXTURE2D_DESC depthDesc = {};
+	depthDesc.Width = windowWidth;
+	depthDesc.Height = windowHeight;
+	depthDesc.ArraySize = 1;
+	depthDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; // Need both!
+	depthDesc.Format = DXGI_FORMAT_R32_FLOAT; // Might occasionally use other formats
+	depthDesc.MipLevels = 1; // Usually no mip chain needed for render targets
+	depthDesc.MiscFlags = 0;
+	depthDesc.SampleDesc.Count = 1; // Can't be zero
+	depthDesc.SampleDesc.Quality = 0;
+	device->CreateTexture2D(&depthDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
 	rtvDesc.Texture2D.MipSlice = 0; // Which mip are we rendering into?
 	rtvDesc.Format = texDesc.Format; // Same format as texture
+
 	device->CreateRenderTargetView(rtTexture.Get(), &rtvDesc, sceneNormalsRTV.GetAddressOf());
 	device->CreateShaderResourceView(rtTexture.Get(), 0, sceneNormalsSRV.GetAddressOf());
 
@@ -177,7 +193,12 @@ void Game::Init()
 	device->CreateRenderTargetView(ssaoBlurTexture.Get(), &rtvDesc, blurRTV.GetAddressOf());
 	device->CreateShaderResourceView(ssaoBlurTexture.Get(), 0, blurSRV.GetAddressOf());
 
-	device->CreateRenderTargetView(depthTexture.Get(), &rtvDesc, depthRTV.GetAddressOf());
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDepthDesc = {};
+	rtvDepthDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
+	rtvDepthDesc.Texture2D.MipSlice = 0; // Which mip are we rendering into?
+	rtvDepthDesc.Format = depthDesc.Format; // Same format as texture
+
+	device->CreateRenderTargetView(depthTexture.Get(), &rtvDepthDesc, depthRTV.GetAddressOf());
 	device->CreateShaderResourceView(depthTexture.Get(), 0, depthSRV.GetAddressOf());
 
 
@@ -471,7 +492,7 @@ void Game::LoadAssetsAndCreateEntities()
 
 	// === Create the PBR entities =====================================
 	std::shared_ptr<GameEntity> cobSpherePBR = std::make_shared<GameEntity>(sphereMesh, cobbleMat2xPBR);
-	cobSpherePBR->GetTransform()->SetPosition(-6, 2, 0);
+	cobSpherePBR->GetTransform()->SetPosition(-3, 3.75, 0);
 	cobSpherePBR->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> floorSpherePBR = std::make_shared<GameEntity>(sphereMesh, floorMatPBR);
@@ -491,11 +512,11 @@ void Game::LoadAssetsAndCreateEntities()
 	bronzeSpherePBR->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> roughSpherePBR = std::make_shared<GameEntity>(sphereMesh, roughMatPBR);
-	roughSpherePBR->GetTransform()->SetPosition(4, 2, 0);
+	roughSpherePBR->GetTransform()->SetPosition(-1, 3.75, 0);
 	roughSpherePBR->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> woodSpherePBR = std::make_shared<GameEntity>(sphereMesh, woodMatPBR);
-	woodSpherePBR->GetTransform()->SetPosition(6, 2, 0);
+	woodSpherePBR->GetTransform()->SetPosition(1, 3.75, 0);
 	woodSpherePBR->GetTransform()->SetScale(2, 2, 2);
 
 	entities.push_back(cobSpherePBR);
@@ -508,31 +529,31 @@ void Game::LoadAssetsAndCreateEntities()
 
 	// Create the non-PBR entities ==============================
 	std::shared_ptr<GameEntity> cobSphere = std::make_shared<GameEntity>(sphereMesh, cobbleMat2x);
-	cobSphere->GetTransform()->SetPosition(-6, -2, 0);
+	cobSphere->GetTransform()->SetPosition(-4, 3.75, 1.75);
 	cobSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> floorSphere = std::make_shared<GameEntity>(sphereMesh, floorMat);
-	floorSphere->GetTransform()->SetPosition(-4, -2, 0);
+	floorSphere->GetTransform()->SetPosition(-5, 2, 1.75);
 	floorSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> paintSphere = std::make_shared<GameEntity>(sphereMesh, paintMat);
-	paintSphere->GetTransform()->SetPosition(-2, -2, 0);
+	paintSphere->GetTransform()->SetPosition(-3, 2, 1.75);
 	paintSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> scratchSphere = std::make_shared<GameEntity>(sphereMesh, scratchedMat);
-	scratchSphere->GetTransform()->SetPosition(0, -2, 0);
+	scratchSphere->GetTransform()->SetPosition(-1, 2, 1.75);
 	scratchSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> bronzeSphere = std::make_shared<GameEntity>(sphereMesh, bronzeMat);
-	bronzeSphere->GetTransform()->SetPosition(2, -2, 0);
+	bronzeSphere->GetTransform()->SetPosition(1, 2, 1.75);
 	bronzeSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> roughSphere = std::make_shared<GameEntity>(sphereMesh, roughMat);
-	roughSphere->GetTransform()->SetPosition(4, -2, 0);
+	roughSphere->GetTransform()->SetPosition(-2, 3.75, 1.75);
 	roughSphere->GetTransform()->SetScale(2, 2, 2);
 
 	std::shared_ptr<GameEntity> woodSphere = std::make_shared<GameEntity>(sphereMesh, woodMat);
-	woodSphere->GetTransform()->SetPosition(6, -2, 0);
+	woodSphere->GetTransform()->SetPosition(0, 3.75, 1.75);
 	woodSphere->GetTransform()->SetScale(2, 2, 2);
 
 	entities.push_back(cobSphere);
@@ -572,19 +593,19 @@ void Game::GenerateLights()
 	dir1.Type = LIGHT_TYPE_DIRECTIONAL;
 	dir1.Direction = XMFLOAT3(1, -1, 1);
 	dir1.Color = XMFLOAT3(0.8f, 0.8f, 0.8f);
-	dir1.Intensity = 1.0f;
+	dir1.Intensity = .4f;
 
 	Light dir2 = {};
 	dir2.Type = LIGHT_TYPE_DIRECTIONAL;
 	dir2.Direction = XMFLOAT3(-1, -0.25f, 0);
 	dir2.Color = XMFLOAT3(0.2f, 0.2f, 0.2f);
-	dir2.Intensity = 1.0f;
+	dir2.Intensity = 0.2f;
 
 	Light dir3 = {};
 	dir3.Type = LIGHT_TYPE_DIRECTIONAL;
 	dir3.Direction = XMFLOAT3(0, -1, 1);
 	dir3.Color = XMFLOAT3(0.2f, 0.2f, 0.2f);
-	dir3.Intensity = 1.0f;
+	dir3.Intensity = 0.1f;
 
 	// Add light to the list
 	lights.push_back(dir1);
@@ -599,7 +620,7 @@ void Game::GenerateLights()
 		point.Position = XMFLOAT3(RandomRange(-10.0f, 10.0f), RandomRange(-5.0f, 5.0f), RandomRange(-10.0f, 10.0f));
 		point.Color = XMFLOAT3(RandomRange(0, 1), RandomRange(0, 1), RandomRange(0, 1));
 		point.Range = RandomRange(5.0f, 10.0f);
-		point.Intensity = RandomRange(0.1f, 3.0f);
+		point.Intensity = RandomRange(0.1f, 0.5f);
 
 		// Add to the list
 		lights.push_back(point);
@@ -631,6 +652,9 @@ void Game::OnResize()
 	blurRTV.Reset();
 	blurSRV.Reset();
 
+	depthRTV.Reset();
+	depthSRV.Reset();
+
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> rtTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> sceneColorsTexture;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> ambientTexture;
@@ -652,7 +676,19 @@ void Game::OnResize()
 	device->CreateTexture2D(&texDesc, 0, ambientTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ssaoTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 	device->CreateTexture2D(&texDesc, 0, ssaoBlurTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
-	device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+	//device->CreateTexture2D(&texDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
+
+	D3D11_TEXTURE2D_DESC depthDesc = {};
+	depthDesc.Width = windowWidth;
+	depthDesc.Height = windowHeight;
+	depthDesc.ArraySize = 1;
+	depthDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; // Need both!
+	depthDesc.Format = DXGI_FORMAT_R32_FLOAT; // Might occasionally use other formats
+	depthDesc.MipLevels = 1; // Usually no mip chain needed for render targets
+	depthDesc.MiscFlags = 0;
+	depthDesc.SampleDesc.Count = 1; // Can't be zero
+	depthDesc.SampleDesc.Quality = 0;
+	device->CreateTexture2D(&depthDesc, 0, depthTexture.GetAddressOf()); // ComPtr<ID3D11Texture2D> rtTexture
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
@@ -660,6 +696,14 @@ void Game::OnResize()
 	rtvDesc.Format = texDesc.Format; // Same format as texture
 	device->CreateRenderTargetView(rtTexture.Get(), &rtvDesc, sceneNormalsRTV.GetAddressOf());
 	device->CreateRenderTargetView(sceneColorsTexture.Get(), &rtvDesc, sceneColorsRTV.GetAddressOf());
+
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDepthDesc = {};
+	rtvDepthDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D; // This points to a Texture2D
+	rtvDepthDesc.Texture2D.MipSlice = 0; // Which mip are we rendering into?
+	rtvDepthDesc.Format = depthDesc.Format; // Same format as texture
+
+	device->CreateRenderTargetView(depthTexture.Get(), &rtvDepthDesc, depthRTV.GetAddressOf());
+	device->CreateShaderResourceView(depthTexture.Get(), 0, depthSRV.GetAddressOf());
 
 	device->CreateShaderResourceView(
 		rtTexture.Get(), // Texture resource itself
@@ -681,8 +725,6 @@ void Game::OnResize()
 	device->CreateRenderTargetView(ssaoBlurTexture.Get(), &rtvDesc, blurRTV.GetAddressOf());
 	device->CreateShaderResourceView(ssaoBlurTexture.Get(), 0, blurSRV.GetAddressOf());
 
-	device->CreateRenderTargetView(depthTexture.Get(), &rtvDesc, depthRTV.GetAddressOf());
-	device->CreateShaderResourceView(depthTexture.Get(), 0, depthSRV.GetAddressOf());
 
 
 	
@@ -730,7 +772,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		context->ClearRenderTargetView(sceneAmbientRTV.Get(), bgColor);
 		context->ClearRenderTargetView(depthRTV.Get(), bgColor);
 		// Clear the depth buffer (resets per-pixel occlusion information)
-		context->ClearDepthStencilView(depthBufferDSV.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+		context->ClearDepthStencilView(depthBufferDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
 
 		ID3D11RenderTargetView* renderTargets[4] = {};
 		renderTargets[0] = sceneColorsRTV.Get();
@@ -754,13 +796,13 @@ void Game::Draw(float deltaTime, float totalTime)
 		ps->SetInt("lightCount", lightCount);
 		ps->SetFloat3("cameraPosition", camera->GetTransform()->GetPosition());
 		ps->CopyBufferData("perFrame");
-
+		ps->SetInt("specIBLTotalMipLevels", sky->GetTotalSpecularIBLMipLevels());
 		ps->SetShaderResourceView("IrradianceIBLMap", sky->GetIrradianceMap());
 		ps->SetShaderResourceView("SpecularIBLMap", sky->GetSpecularMap());
 		ps->SetShaderResourceView("BrdfLookUpMap", sky->GetBRDFLookUpTexture());
 		ps->SetSamplerState("BasicSampler", samplerOptions);
 		ps->SetSamplerState("ClampSampler", clampSamplerOptions);
-		ps->SetInt("specIBLTotalMipLevels", sky->GetTotalSpecularIBLMipLevels());
+		
 
 		// Draw the entity
 		ge->Draw(context, camera);
@@ -806,8 +848,8 @@ void Game::Draw(float deltaTime, float totalTime)
 		ssaoPS->SetMatrix4x4("viewMatrix", view);
 		ssaoPS->SetMatrix4x4("projectionMatrix", proj);
 		ssaoPS->SetData("offsets", ssaoOffsets, sizeof(XMFLOAT4) * ARRAYSIZE(ssaoOffsets));
-		ssaoPS->SetFloat("ssaoRadius", 1.0f);
-		ssaoPS->SetInt("ssaoSamples", 64);
+		ssaoPS->SetFloat("ssaoRadius", ssaoRadius);
+		ssaoPS->SetInt("ssaoSamples", ssaoSamples);
 		ssaoPS->SetFloat2("randomTextureScreenScale", XMFLOAT2(windowWidth / 4.0f, windowHeight / 4.0f));
 		ssaoPS->CopyAllBufferData();
 
@@ -820,7 +862,7 @@ void Game::Draw(float deltaTime, float totalTime)
 		context->Draw(3, 0);
 
 
-		renderTargets[0] = ssaoRTV.Get();
+		renderTargets[0] = blurRTV.Get();
 		context->OMSetRenderTargets(1, renderTargets, 0);
 		blurPS->SetShader();
 		blurPS->SetShaderResourceView("SSAO", ssaoSRV);
@@ -1105,10 +1147,18 @@ void Game::BuildUI()
 			ImGui::Image(sceneNormalsSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(sceneAmbientSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(depthSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
-			//ImGui::Image(randomTexSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(ssaoSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
 			ImGui::Image(blurSRV.Get(), ImVec2(size.x * 2, rtHeight * 2));
-			//ImGui::Image(backBufferRTV.Get(), ImVec2(size.x * 2, rtHeight * 2));
+
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("SSAO Settings"))
+		{
+			ImGui::SliderInt("SSAO Samples", &ssaoSamples, 1, 64);
+			ImGui::SliderFloat("Radius", &ssaoRadius, 0.0f, 5.0f);
+
+
 
 			ImGui::TreePop();
 		}

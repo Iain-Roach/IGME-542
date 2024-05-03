@@ -9,7 +9,7 @@ struct VertexToPixel
     float2 uv : TEXCOORD;
 };
 
-Texture2D tex : register(t0);
+Texture2D SSAO : register(t0);
 SamplerState ClampSampler : register(s0);
 
 
@@ -20,7 +20,7 @@ float4 main(VertexToPixel input) : SV_TARGET
     {
         for (float y = -1.5f; y <= 1.5f; y++)
         {
-            ao += tex.Sample(ClampSampler, float2(x, y) * pixelSize + input.uv).r;
+            ao += SSAO.Sample(ClampSampler, float2(x, y) * pixelSize + input.uv).r;
         }
     }
 // Average results and return

@@ -97,5 +97,8 @@ private:
 	
 	// Should the ImGui demo window be shown?
 	bool showUIDemoWindow;
+
+	int ssaoSamples;
+	float ssaoRadius;
 };
 
